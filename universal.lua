@@ -6,33 +6,45 @@ function Universal.CreateUniversalTab(Window, Rayfield, Players, RunService)
  local character = player.Character or player.CharacterAdded:Wait()
  local hrp = character:WaitForChild("HumanoidRootPart")
 
- local UniversalTab = Window:CreateTab("Universal", 4483362458)
+ local Lighting = game:GetService("Lighting")
+ local UserInputService = game:GetService("UserInputService")
+ local mouse = player:GetMouse()
+ local TeleportService = game:GetService("TeleportService")
 
- -- ========== STATE VAR ==========
- local noclipConn, wsLoop, jpLoop, brightLoop, highlightActive = nil, nil, nil, nil, false
+ -- Tabs
+ local MainTab = Window:CreateTab("Main", 4483362458)
+ local ToolsTab = Window:CreateTab("Tools", 4483362458)
+
+ -- ======== MAIN TAB ========
+
+ -- Character control
+ local noclipConn
+ local flySpeed = 100
+ local flying = false
+ local flyBV, flyBG, flyConn
+ local cflyConn
+ local wsLoop, jpLoop
+ local brightLoop
+ local highlightActive = false
  local highlightObjects = {}
- local flyConn, flyBV, flyBG, flySpeed = nil, nil, nil, 100
- local cflyConn, cFlying = nil, false
 
- -- ========== NOCLIP ==========
+ -- NOCLIP
  local function startNoclip()
   noclipConn = RunService.Stepped:Connect(function()
    local char = player.Character
    if char then
     for _,p in pairs(char:GetDescendants()) do
-     if p:IsA("BasePart") then
-      p.CanCollide = false
-     end
+     if p:IsA("BasePart") then p.CanCollide = false end
     end
    end
   end)
  end
 
  local function stopNoclip()
-  if noclipConn then noclipConn:Disconnect() noclipConn = nil end
+  if noclipConn then noclipConn:Disconnect() noclipConn=nil end
  end
 
- UniversalTab:CreateToggle({
+ MainTab:CreateToggle({
   Name = "Noclip",
   CurrentValue = false,
   Callback = function(v)
@@ -40,15 +52,14 @@ function Universal.CreateUniversalTab(Window, Rayfield, Players, RunService)
   end
  })
 
- -- ========== WALKSPEED ==========
- UniversalTab:CreateSlider({
+ -- WALKSPEED
+ MainTab:CreateSlider({
   Name = "WalkSpeed",
   Range = {16,300},
   Increment = 5,
   CurrentValue = 16,
   Callback = function(v)
-   local char = player.Character
-   local hum = char and char:FindFirstChildWhichIsA("Humanoid")
+   local hum = player.Character and player.Character:FindFirstChildWhichIsA("Humanoid")
    if hum then
     hum.WalkSpeed = v
     if wsLoop then wsLoop:Disconnect() end
@@ -59,15 +70,14 @@ function Universal.CreateUniversalTab(Window, Rayfield, Players, RunService)
   end
  })
 
- -- ========== JUMPPOWER ==========
- UniversalTab:CreateSlider({
+ -- JUMPPOWER
+ MainTab:CreateSlider({
   Name = "JumpPower",
   Range = {50,300},
   Increment = 10,
   CurrentValue = 50,
   Callback = function(v)
-   local char = player.Character
-   local hum = char and char:FindFirstChildWhichIsA("Humanoid")
+   local hum = player.Character and player.Character:FindFirstChildWhichIsA("Humanoid")
    if hum then
     hum.JumpPower = v
     if jpLoop then jpLoop:Disconnect() end
@@ -78,7 +88,31 @@ function Universal.CreateUniversalTab(Window, Rayfield, Players, RunService)
   end
  })
 
- -- ========== HIGHLIGHT ==========
+ -- FULLBRIGHT / NO FOG
+ local function loopfullbright()
+  if brightLoop then brightLoop:Disconnect() end
+  brightLoop = RunService.RenderStepped:Connect(function()
+   Lighting.Brightness = 2
+   Lighting.ClockTime = 14
+   Lighting.FogEnd = 1e5
+   Lighting.GlobalShadows = false
+   Lighting.OutdoorAmbient = Color3.fromRGB(128,128,128)
+  end)
+ end
+
+ local function unloopfullbright()
+  if brightLoop then brightLoop:Disconnect() brightLoop=nil end
+ end
+
+ MainTab:CreateToggle({
+  Name = "Fullbright",
+  CurrentValue = false,
+  Callback = function(v)
+   if v then loopfullbright() else unloopfullbright() end
+  end
+ })
+
+ -- HIGHLIGHT PLAYERS
  local function clearHighlights()
   for _,h in pairs(highlightObjects) do
    if h then h:Destroy() end
@@ -120,7 +154,7 @@ function Universal.CreateUniversalTab(Window, Rayfield, Players, RunService)
   end
  end)
 
- UniversalTab:CreateToggle({
+ MainTab:CreateToggle({
   Name = "Highlight Players",
   CurrentValue = false,
   Callback = function(v)
@@ -129,19 +163,17 @@ function Universal.CreateUniversalTab(Window, Rayfield, Players, RunService)
   end
  })
 
- -- ========== FLY ==========
+ -- FLY & CFly
  local function stopFly()
   if flyConn then flyConn:Disconnect() flyConn=nil end
   if flyBV then flyBV:Destroy() flyBV=nil end
   if flyBG then flyBG:Destroy() flyBG=nil end
-  local char = player.Character
-  if char then
-   local hum = char:FindFirstChildWhichIsA("Humanoid")
-   if hum then hum.PlatformStand = false end
-  end
+  local hum = player.Character and player.Character:FindFirstChildWhichIsA("Humanoid")
+  if hum then hum.PlatformStand = false end
+  flying = false
  end
 
- UniversalTab:CreateSlider({
+ MainTab:CreateSlider({
   Name = "Fly Speed",
   Range = {20,300},
   Increment = 10,
@@ -151,7 +183,7 @@ function Universal.CreateUniversalTab(Window, Rayfield, Players, RunService)
   end
  })
 
- UniversalTab:CreateToggle({
+ MainTab:CreateToggle({
   Name = "Fly (Mobile)",
   CurrentValue = false,
   Callback = function(v)
@@ -190,8 +222,7 @@ function Universal.CreateUniversalTab(Window, Rayfield, Players, RunService)
   end
  })
 
- -- ========== CFLY ==========
- UniversalTab:CreateToggle({
+ MainTab:CreateToggle({
   Name = "CFly",
   CurrentValue = false,
   Callback = function(v)
@@ -229,7 +260,110 @@ function Universal.CreateUniversalTab(Window, Rayfield, Players, RunService)
   end
  })
 
- return UniversalTab
+ -- ======== TOOLS TAB ========
+
+ local deleteTool, bringTool, antiAFKConn, antiHooked, oldNamecall
+
+ ToolsTab:CreateToggle({
+  Name = "Delete Tool",
+  CurrentValue = false,
+  Callback = function(v)
+   if v then
+    if deleteTool then return end
+    deleteTool = Instance.new("Tool")
+    deleteTool.Name = "Delete Tool"
+    deleteTool.RequiresHandle = false
+    deleteTool.Parent = player.Backpack
+    deleteTool.Activated:Connect(function()
+     local target = mouse.Target
+     if target and not target:IsDescendantOf(player.Character) then
+      target:Destroy()
+     end
+    end)
+   else
+    if deleteTool then deleteTool:Destroy() deleteTool=nil end
+   end
+  end
+ })
+
+ ToolsTab:CreateToggle({
+  Name = "Bring Tool",
+  CurrentValue = false,
+  Callback = function(v)
+   if v then
+    if bringTool then return end
+    bringTool = Instance.new("Tool")
+    bringTool.Name = "Bring Tool"
+    bringTool.RequiresHandle = false
+    bringTool.Parent = player.Backpack
+    bringTool.Activated:Connect(function()
+     local target = mouse.Target
+     local char = player.Character
+     local root = char and char:FindFirstChild("HumanoidRootPart")
+     if root and target and target:IsA("BasePart") and not target:IsDescendantOf(char) then
+      target.CFrame = root.CFrame * CFrame.new(0,0,-5)
+     end
+    end)
+   else
+    if bringTool then bringTool:Destroy() bringTool=nil end
+   end
+  end
+ })
+
+ ToolsTab:CreateToggle({
+  Name = "Anti AFK",
+  CurrentValue = false,
+  Callback = function(v)
+   if v then
+    local VirtualUser = game:GetService("VirtualUser")
+    antiAFKConn = player.Idled:Connect(function()
+     VirtualUser:CaptureController()
+     VirtualUser:ClickButton2(Vector2.new())
+    end)
+   else
+    if antiAFKConn then antiAFKConn:Disconnect() antiAFKConn=nil end
+   end
+  end
+ })
+
+ ToolsTab:CreateToggle({
+  Name = "Anti Kick / Ban",
+  CurrentValue = false,
+  Callback = function(v)
+   if v and not antiHooked then
+    antiHooked = true
+    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+     local method = getnamecallmethod()
+     if method == "Kick" then return end
+     if method == "FireServer" or method == "InvokeServer" then
+      local n = tostring(self):lower()
+      if n:find("ban") or n:find("kick") then
+       return
+      end
+     end
+     return oldNamecall(self, ...)
+    end)
+   elseif not v and antiHooked then
+    antiHooked = false
+   end
+  end
+ })
+
+ ToolsTab:CreateButton({
+  Name = "Rejoin Server",
+  Callback = function()
+   TeleportService:Teleport(game.PlaceId, player)
+  end
+ })
+
+ ToolsTab:CreateButton({
+  Name = "Close & Destroy GUI",
+  Callback = function()
+   if Window then Window:Destroy() end
+  end
+ })
+
+ return {MainTab = MainTab, ToolsTab = ToolsTab}
 end
 
 return Universal
