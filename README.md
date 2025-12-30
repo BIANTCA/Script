@@ -109,6 +109,9 @@ local Window = Rayfield:CreateWindow({
  LoadingSubtitle = "Powered by Universal.lua"
 })
 
+local MainTab = Window:CreateTab("Main", 4483362458)
+_G.MainTab = MainTab <--- to put into your mainTab
+
 -- Import Universal
 local Universal = loadstring(game:HttpGet("https://raw.githubusercontent.com/BIANTCA/Script/refs/heads/main/universal.lua"))()
 Universal.CreateUniversalTab(Window, Rayfield, game:GetService("Players"), game:GetService("RunService"))
