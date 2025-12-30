@@ -1,6 +1,6 @@
 ---
 
-🧠 Universal.lua — Roblox Universal Utility Module
+# 🧠 Universal.lua — Roblox Universal Utility Module
 
 Universal.lua is a modular Roblox Lua script that adds powerful character, movement, and visual utilities into any custom Rayfield GUI window.
 It’s designed to be dropped into any exploit script as a plug-and-play extension that automatically builds full-featured Main and Tools tabs.
@@ -8,9 +8,9 @@ It’s designed to be dropped into any exploit script as a plug-and-play extensi
 
 ---
 
-🚀 Features
+### 🚀 Features
 
-🧍 Character Main
+## 🧍 Character Main
 
 Noclip – Walk through walls and objects.
 
@@ -25,7 +25,7 @@ No Fall Damage – Disable fall damage or knockdown states.
 Anti Stun – Prevent forced stuns or platform stand.
 
 
-🏃 Movement
+## 🏃 Movement
 
 WalkSpeed Control – Adjust player movement speed (16–300).
 
@@ -38,7 +38,7 @@ Climb Anywhere – Scale any surface by moving forward.
 Auto Align to Ground – Automatically stand level on slopes.
 
 
-👁️ Visual
+## 👁️ Visual
 
 Fullbright – Always bright daylight environment.
 
@@ -51,7 +51,7 @@ Distance Labels – Display distance above each player’s head.
 Outline World – Apply holographic outlines to all world parts.
 
 
-🧰 Tools
+## 🧰 Tools
 
 Delete Tool – Click any object to delete it.
 
@@ -69,7 +69,7 @@ Close GUI – Cleanly remove the entire Rayfield interface.
 
 ---
 
-🧩 Example Usage
+## 🧩 Example Usage
 
 To load the Universal module inside your own Rayfield GUI script:
 ```
@@ -97,7 +97,7 @@ Tools tab — Miscellaneous tools and anti-systems
 
 ---
 
-🧩 Integration Example
+## 🧩 Integration Example
 
 If your GUI already defines a Rayfield window:
 ```
@@ -116,7 +116,7 @@ Universal.CreateUniversalTab(Window, Rayfield, game:GetService("Players"), game:
 
 ---
 
-🧩 Notes
+## 🧩 Notes
 
 All toggles, sliders, and buttons are self-contained and automatically connect to the local player.
 
@@ -128,7 +128,7 @@ Works with both desktop and mobile executors that support Rayfield.
 
 ---
 
-⚙️ Credits
+## ⚙️ Credits
 
 Developed by BIANTCA
 Designed for easy integration, customization, and extendability.
