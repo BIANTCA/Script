@@ -12,7 +12,7 @@ function Universal.CreateUniversalTab(Window, Rayfield, Players, RunService)
  local TeleportService = game:GetService("TeleportService")
 
  -- Tabs
- local MainTab = Window:CreateTab("Main", 4483362458)
+local MainTab = _G.MainTab or Window:CreateTab("Main", 4483362458)
  local ToolsTab = Window:CreateTab("Tools", 4483362458)
 
  -- ======== MAIN TAB ========
