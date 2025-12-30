@@ -12,6 +12,8 @@ local TeleportService = game:GetService("TeleportService")
 
 local MainTab = _G.MainTab or Window:CreateTab("Main", 4483362458)
 local ToolsTab = Window:CreateTab("Tools", 4483362458)
+local WaypointTab = Window:CreateTab("Waypoints", 4483362458)
+
 
 -- ======== MAIN TAB ========
 local noclipConn
@@ -25,7 +27,7 @@ local highlightActive = false
 local highlightObjects = {}
 
 --char main
-MainTab:CreateSection("Character Main")
+MainTab:CreateSection("Character Main Menu")
 local function startNoclip()
 noclipConn = RunService.Stepped:Connect(function()
  local char = player.Character
@@ -770,6 +772,71 @@ ToolsTab:CreateButton({
 return {
  MainTab = MainTab, ToolsTab = ToolsTab
 }
+end
+
+local waypoints = {}
+local selectedWaypointIndex = nil
+
+-- Section
+WaypointTab:CreateSection("Waypoint Manager")
+local function addWaypoint(pos)
+ local name = "Waypoint"..(#waypoints+1)
+ table.insert(waypoints, {Name = name, Position = pos})
+ WaypointTab:CreateButton({
+  Name = "TP to "..name,
+  Callback = function()
+   if pos then
+    hrp.CFrame = CFrame.new(pos)
+   end
+  end
+ })
+end
+
+WaypointTab:CreateButton({
+ Name = "Add Waypoint",
+ Callback = function()
+  local pos = hrp.Position
+  addWaypoint(pos)
+  Rayfield:Notify({
+   Title = "Waypoint Added",
+   Content = "New waypoint at current position",
+   Duration = 2
+  })
+ end
+})
+
+WaypointTab:CreateButton({
+ Name = "Delete Last Waypoint",
+ Callback = function()
+  if #waypoints > 0 then
+   table.remove(waypoints)
+   Rayfield:Notify({
+    Title = "Waypoint Deleted",
+    Content = "Last waypoint removed",
+    Duration = 2
+   })
+  end
+ end
+})
+
+local function updateDropdown()
+ local names = {}
+ for _, wp in ipairs(waypoints) do
+  table.insert(names, wp.Name)
+ end
+ WaypointTab:CreateDropdown({
+  Name = "Select Waypoint",
+  Options = names,
+  CurrentOption = names[1],
+  Callback = function(option)
+   for _, wp in ipairs(waypoints) do
+    if wp.Name == option then
+     hrp.CFrame = CFrame.new(wp.Position)
+     break
+    end
+   end
+  end
+ })
 end
 
 return Universal
