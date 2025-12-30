@@ -28,6 +28,7 @@ local MainTab = _G.MainTab or Window:CreateTab("Main", 4483362458)
  local highlightActive = false
  local highlightObjects = {}
 
+ MainTab:CreateSection("Character Main")
  -- NOCLIP
  local function startNoclip()
   noclipConn = RunService.Stepped:Connect(function()
@@ -52,6 +53,7 @@ local MainTab = _G.MainTab or Window:CreateTab("Main", 4483362458)
   end
  })
 
+ MainTab:CreateSection("Movement")
  -- WALKSPEED
  MainTab:CreateSlider({
   Name = "WalkSpeed",
@@ -87,7 +89,8 @@ local MainTab = _G.MainTab or Window:CreateTab("Main", 4483362458)
    end
   end
  })
-
+ 
+ MainTab:CreateSection("Visual")
  -- FULLBRIGHT / NO FOG
  local function loopfullbright()
   if brightLoop then brightLoop:Disconnect() end
@@ -162,7 +165,8 @@ local MainTab = _G.MainTab or Window:CreateTab("Main", 4483362458)
    if not v then clearHighlights() end
   end
  })
-
+ 
+ MainTab:CreateSection("Fly menu")
  -- FLY & CFly
  local function stopFly()
   if flyConn then flyConn:Disconnect() flyConn=nil end
@@ -264,6 +268,7 @@ local MainTab = _G.MainTab or Window:CreateTab("Main", 4483362458)
 
  local deleteTool, bringTool, antiAFKConn, antiHooked, oldNamecall
 
+ ToolsTab:CreateSection("Tools utility")
  ToolsTab:CreateToggle({
   Name = "Delete Tool",
   CurrentValue = false,
@@ -348,7 +353,8 @@ local MainTab = _G.MainTab or Window:CreateTab("Main", 4483362458)
    end
   end
  })
-
+ 
+ ToolsTab:CreateSection("Session control")
  ToolsTab:CreateButton({
   Name = "Rejoin Server",
   Callback = function()
