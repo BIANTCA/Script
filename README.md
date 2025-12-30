@@ -72,10 +72,10 @@ Close GUI – Cleanly remove the entire Rayfield interface.
 🧩 Example Usage
 
 To load the Universal module inside your own Rayfield GUI script:
-
+```
 local Universal = loadstring(game:HttpGet("https://raw.githubusercontent.com/BIANTCA/Script/refs/heads/main/universal.lua"))()
 Universal.CreateUniversalTab(Window, Rayfield, Players, RunService)
-
+```
 Parameters:
 
 Window → your existing Rayfield window instance
@@ -100,7 +100,7 @@ Tools tab — Miscellaneous tools and anti-systems
 🧩 Integration Example
 
 If your GUI already defines a Rayfield window:
-
+```
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
@@ -112,7 +112,7 @@ local Window = Rayfield:CreateWindow({
 -- Import Universal
 local Universal = loadstring(game:HttpGet("https://raw.githubusercontent.com/BIANTCA/Script/refs/heads/main/universal.lua"))()
 Universal.CreateUniversalTab(Window, Rayfield, game:GetService("Players"), game:GetService("RunService"))
-
+```
 
 ---
 
