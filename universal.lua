@@ -772,11 +772,4 @@ return {
 }
 end
 
-local waypoints = {} local selectedWaypointIndex = nil
-local WaypointTab = Window:CreateTab("Waypoints", 4483362458) WaypointTab:CreateSection("Waypoint Manager")
-local function updateDropdown() local names = {} for _, wp in ipairs(waypoints) do table.insert(names, wp.Name) end WaypointTab:CreateDropdown({ Name = "Select Waypoint", Options = names, CurrentOption = names[1], Callback = function(option) for i, wp in ipairs(waypoints) do if wp.Name == option then selectedWaypointIndex = i hrp.CFrame = CFrame.new(wp.Position) break end end end }) end
-local function addWaypoint(pos) local name = "Waypoint"..(#waypoints+1) table.insert(waypoints, {Name = name, Position = pos}) updateDropdown() Rayfield:Notify({ Title = "Waypoint Added", Content = name.." added at current position", Duration = 2 }) end
-WaypointTab:CreateButton({ Name = "Add Waypoint", Callback = function() addWaypoint(hrp.Position) end })
-WaypointTab:CreateButton({ Name = "Delete Last Waypoint", Callback = function() if #waypoints > 0 then table.remove(waypoints) updateDropdown() Rayfield:Notify({ Title = "Waypoint Deleted", Content = "Last waypoint removed", Duration = 2 }) end end })
-
 return Universal
