@@ -781,21 +781,27 @@ local waypointDropdown = WaypointTab:CreateDropdown({
  end
 })
 
--- Fungsi refresh dropdown
 local function refreshWaypointDropdown()
  local options = {"None"}
  for name, _ in pairs(waypoints) do
   table.insert(options, name)
  end
+
+ local oldSelection = selectedWaypoint
+
  waypointDropdown:Refresh(options, true)
- if not waypoints[selectedWaypoint] then
+
+ if oldSelection and waypoints[oldSelection] then
+  selectedWaypoint = oldSelection
+  waypointDropdown:Set(oldSelection)
+ else
   selectedWaypoint = nil
   waypointDropdown:Set("None")
  end
 end
 
 WaypointTab:CreateButton({
- Name = "➕ Add Current Location",
+ Name = "Add Current Location",
  Callback = function()
   local char = player.Character
   if not char then return end
@@ -805,7 +811,10 @@ WaypointTab:CreateButton({
   local name = "Waypoint_" .. tostring(#waypoints + 1)
   waypoints[name] = hrp.CFrame
 
+  selectedWaypoint = name
   refreshWaypointDropdown()
+  waypointDropdown:Set(name)
+
   Rayfield:Notify({
    Title = "Waypoint Added",
    Content = "Added: " .. name,
