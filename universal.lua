@@ -818,6 +818,7 @@ local character = player.Character or player.CharacterAdded:Wait()
 return character:FindFirstChild("HumanoidRootPart")
 end
 
+WaypointTab:CreateSection("BETA")
 WaypointTab:CreateButton({
  Name = "Add Current Location",
  Callback = function()
