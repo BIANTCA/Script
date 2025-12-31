@@ -779,16 +779,26 @@ return #waypoints
 end
 
 local function refreshWaypointDropdown()
-if waypointDropdown then
-waypointDropdown:Destroy()
-waypointDropdown = nil
-end
+ local options = {"None"}
+ for name in pairs(waypoints) do
+  table.insert(options, name)
+ end
 
-local options = {
- "None"
-}
-for name in pairs(waypoints) do
-table.insert(options, name)
+ if waypointDropdown then
+  waypointDropdown:Refresh(options, selectedWaypoint or "None")
+ else
+  waypointDropdown = WaypointTab:CreateDropdown({
+   Name = "Waypoint List",
+   Options = options,
+   CurrentOption = selectedWaypoint or "None",
+   Callback = function(option)
+    if typeof(option) == "table" then
+     option = option[1]
+    end
+    selectedWaypoint = (option ~= "None") and option or nil
+   end
+  })
+ end
 end
 
 waypointDropdown = WaypointTab:CreateDropdown({
