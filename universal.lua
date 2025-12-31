@@ -11,7 +11,6 @@ local mouse = player:GetMouse()
 local TeleportService = game:GetService("TeleportService")
 
 local MainTab = _G.MainTab or Window:CreateTab("Main", 4483362458)
-local WaypointTab = Window:CreateTab("Waypoints", 4483362458)
 local ToolsTab = Window:CreateTab("Tools", 4483362458)
 
 -- ======== MAIN TAB ========
@@ -768,103 +767,9 @@ ToolsTab:CreateButton({
  end
 })
 
-local waypoints = {}
-local selectedWaypointIndex = nil
-local waypointDropdown
-
-WaypointTab:CreateSection("Waypoint Manager")
-local wpName = "Waypoint"..(#waypoints+1)
-local nameInput = WaypointTab:CreateInput({
- Name = "Waypoint Name",
- PlaceholderText = wpName,
- RemoveTextAfterFocusLost = false,
- Callback = function(value)
-  wpName = value ~= "" and value or ("Waypoint"..(#waypoints+1))
- end
-})
-
-local function updateWaypointDropdown()
- local options = {}
- for i,v in pairs(waypoints) do
-  table.insert(options, v.Name)
- end
-
- if #options == 0 then
-  options = {"No Waypoints"}
-  selectedWaypointIndex = nil
- else
-  selectedWaypointIndex = 1
- end
-
- if waypointDropdown then
-  waypointDropdown:Refresh(options, selectedWaypointIndex or 1)
- else
-  waypointDropdown = WaypointTab:CreateDropdown({
-   Name = "Select Waypoint",
-   Options = options,
-   CurrentOption = options[selectedWaypointIndex or 1],
-   Callback = function(option)
-    for i,v in pairs(waypoints) do
-     if v.Name == option then
-      selectedWaypointIndex = i
-      break
-     end
-    end
-   end
-  })
- end
-end
-
-updateWaypointDropdown()
-WaypointTab:CreateButton({
- Name = "Save Waypoint",
- Callback = function()
-  local char = player.Character
-  local root = char and char:FindFirstChild("HumanoidRootPart")
-  if root then
-   local nameToSave = wpName ~= "" and wpName or ("Waypoint"..(#waypoints+1))
-   table.insert(waypoints, {CFrame = root.CFrame, Name = nameToSave})
-   updateWaypointDropdown()
-  end
- end
-})
-
-WaypointTab:CreateButton({
- Name = "Teleport to Selected",
- Callback = function()
-  local wp = waypoints[selectedWaypointIndex]
-  local char = player.Character
-  local root = char and char:FindFirstChild("HumanoidRootPart")
-  if wp and root then
-   root.CFrame = wp.CFrame + Vector3.new(0,3,0)
-  end
- end
-})
-
-WaypointTab:CreateButton({
- Name = "Delete Selected Waypoint",
- Callback = function()
-  if selectedWaypointIndex then
-   table.remove(waypoints, selectedWaypointIndex)
-   selectedWaypointIndex = nil
-   updateWaypointDropdown()
-  end
- end
-})
-
-WaypointTab:CreateButton({
- Name = "Clear All Waypoints",
- Callback = function()
-  waypoints = {}
-  selectedWaypointIndex = nil
-  updateWaypointDropdown()
- end
-})
-
 return {
  MainTab = MainTab,
  ToolsTab = ToolsTab,
- WaypointTab = WaypointTab
 }
 end
 
