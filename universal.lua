@@ -785,8 +785,16 @@ local function refreshWaypointDropdown()
  end
 
  if waypointDropdown then
-  waypointDropdown:Refresh(options, selectedWaypoint or "None")
+  -- Jika ada method Refresh (versi Rayfield terbaru)
+  if waypointDropdown.Refresh then
+   waypointDropdown:Refresh(options, selectedWaypoint or "None")
+  else
+   -- fallback: set ulang opsi dengan CurrentOption
+   waypointDropdown.Options = options
+   waypointDropdown:Set(selectedWaypoint or "None")
+  end
  else
+  -- buat dropdown baru jika belum ada
   waypointDropdown = WaypointTab:CreateDropdown({
    Name = "Waypoint List",
    Options = options,
