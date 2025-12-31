@@ -768,577 +768,101 @@ ToolsTab:CreateButton({
  end
 })
 
-local waypoints = {}
-local selectedWaypoint = nil
-local currentWaypointName = ""
-local HttpService = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
 
-WaypointTab:CreateSection("Waypoints List")
-local waypointListLabel = WaypointTab:CreateLabel("No waypoints saved")
-
+local waypoints = {}
+local selectedWaypoint = nil
 local waypointDropdown = WaypointTab:CreateDropdown({
- Name = "Select Waypoint",
- Options = {
-  "None"
- },
+ Name = "Waypoint List",
+ Options = {"None"},
  CurrentOption = "None",
- MultipleOptions = false,
  Callback = function(option)
- selectedWaypoint = (option ~= "None") and option or nil
- if selectedWaypoint then
- Rayfield:Notify({
-  Title = "Waypoint Selected",
-  Content = "Selected: " .. selectedWaypoint,
-  Duration = 2,
-  Image = 4483362458
- })
- end
+  selectedWaypoint = (option ~= "None") and option or nil
  end
 })
 
-local function refreshWaypointDisplay()
-local options = {
- "None"
-}
-local waypointText = ""
-
-if next(waypoints) == nil then
-waypointText = "No waypoints saved"
-else
- waypointText = "Saved Waypoints:\n"
-local count = 1
-for name, wp in pairs(waypoints) do
-table.insert(options, name)
-waypointText = waypointText .. count .. ". " .. name ..
-" (X: " .. string.format("%.1f", wp.position.X) ..
-", Y: " .. string.format("%.1f", wp.position.Y) ..
-", Z: " .. string.format("%.1f", wp.position.Z) .. ")\n"
-count = count + 1
-end
+-- Fungsi refresh dropdown
+local function refreshWaypointDropdown()
+ local options = {"None"}
+ for name, _ in pairs(waypoints) do
+  table.insert(options, name)
+ end
+ waypointDropdown:Refresh(options, true)
+ if not waypoints[selectedWaypoint] then
+  selectedWaypoint = nil
+  waypointDropdown:Set("None")
+ end
 end
 
-waypointListLabel:Set(waypointText)
-waypointDropdown:Refresh(options, true)
-if selectedWaypoint and not waypoints[selectedWaypoint] then
-selectedWaypoint = nil
-waypointDropdown:Set("None")
-end
-end
+WaypointTab:CreateButton({
+ Name = "➕ Add Current Location",
+ Callback = function()
+  local char = player.Character
+  if not char then return end
+  local hrp = char:FindFirstChild("HumanoidRootPart")
+  if not hrp then return end
 
-WaypointTab:CreateSection("Add Waypoint")
+  local name = "Waypoint_" .. tostring(#waypoints + 1)
+  waypoints[name] = hrp.CFrame
 
-local wpNameInput = WaypointTab:CreateInput({
- Name = "Waypoint Name",
- PlaceholderText = "Enter name (auto-generate if empty)",
- RemoveTextAfterFocusLost = false,
- Callback = function(text)
- currentWaypointName = text
+  refreshWaypointDropdown()
+  Rayfield:Notify({
+   Title = "Waypoint Added",
+   Content = "Added: " .. name,
+   Duration = 2
+  })
  end
 })
 
 WaypointTab:CreateButton({
- Name = "➕ Save Current Position",
+ Name = "Teleport to Selected",
  Callback = function()
- local char = player.Character
- if not char then
- Rayfield:Notify({
-  Title = "Error",
-  Content = "Character not found!",
-  Duration = 3,
-  Image = 4483362458
- })
- return
- end
-
- local hrp = char:FindFirstChild("HumanoidRootPart")
- if not hrp then
- Rayfield:Notify({
-  Title = "Error",
-  Content = "HumanoidRootPart not found!",
-  Duration = 3,
-  Image = 4483362458
- })
- return
- end
-
- local wpName = currentWaypointName
- if wpName == nil or wpName == "" then
- wpName = "WP_" .. os.time()
- end
-
- wpName = tostring(wpName):gsub("%s+", "_")
- local originalName = wpName
- local counter = 1
- while waypoints[wpName] do
- wpName = originalName .. "_" .. counter
- counter = counter + 1
- end
-
- waypoints[wpName] = {
-  position = hrp.Position,
-  cf = hrp.CFrame,
-  timestamp = os.time()
- }
-
- wpNameInput:Set("")
- currentWaypointName = ""
-
- refreshWaypointDisplay()
-
- Rayfield:Notify({
-  Title = "Waypoint Saved",
-  Content = "Saved as: " .. wpName,
-  Duration = 3,
-  Image = 4483362458
- })
- end
-})
-
-WaypointTab:CreateSection("Teleport")
-WaypointTab:CreateButton({
- Name = "🚀 Teleport to Selected",
- Callback = function()
- if not selectedWaypoint or not waypoints[selectedWaypoint] then
- Rayfield:Notify({
-  Title = "Error",
-  Content = "Please select a waypoint first!",
-  Duration = 3,
-  Image = 4483362458
- })
- return
- end
-
- local char = player.Character
- if not char then
- Rayfield:Notify({
-  Title = "Error",
-  Content = "Character not found!",
-  Duration = 3,
-  Image = 4483362458
- })
- return
- end
-
- local hrp = char:FindFirstChild("HumanoidRootPart")
- if not hrp then
- Rayfield:Notify({
-  Title = "Error",
-  Content = "HumanoidRootPart not found!",
-  Duration = 3,
-  Image = 4483362458
- })
- return
- end
-
- local wp = waypoints[selectedWaypoint]
-
- local tweenInfo = TweenInfo.new(
-  0.7, -- Duration
-  Enum.EasingStyle.Quad,
-  Enum.EasingDirection.Out,
-  0,
-  false,
-  0
- )
-
- local tween = TweenService:Create(hrp, tweenInfo, {
-  CFrame = wp.cf
- })
- tween:Play()
-
- Rayfield:Notify({
-  Title = "Teleporting",
-  Content = "Teleporting to: " .. selectedWaypoint,
-  Duration = 2,
-  Image = 4483362458
- })
-
- tween.Completed:Wait()
-
- Rayfield:Notify({
-  Title = "Arrived",
-  Content = "Successfully teleported to: " .. selectedWaypoint,
-  Duration = 2,
-  Image = 4483362458
- })
- end
-})
-
-WaypointTab:CreateButton({
- Name = "Instant Teleport (No Tween)",
- Callback = function()
- if not selectedWaypoint or not waypoints[selectedWaypoint] then
- Rayfield:Notify({
-  Title = "Error",
-  Content = "Please select a waypoint first!",
-  Duration = 3,
-  Image = 4483362458
- })
- return
- end
-
- local char = player.Character
- if not char then
- Rayfield:Notify({
-  Title = "Error",
-  Content = "Character not found!",
-  Duration = 3,
-  Image = 4483362458
- })
- return
- end
-
- local hrp = char:FindFirstChild("HumanoidRootPart")
- if not hrp then
- Rayfield:Notify({
-  Title = "Error",
-  Content = "HumanoidRootPart not found!",
-  Duration = 3,
-  Image = 4483362458
- })
- return
- end
-
- local wp = waypoints[selectedWaypoint]
-
- hrp.CFrame = wp.cf
-
- Rayfield:Notify({
-  Title = "Teleported",
-  Content = "Instantly teleported to: " .. selectedWaypoint,
-  Duration = 2,
-  Image = 4483362458
- })
- end
-})
-
-WaypointTab:CreateSection("Manage Waypoints")
-
-WaypointTab:CreateButton({
- Name = "Rename Selected",
- Callback = function()
- if not selectedWaypoint or not waypoints[selectedWaypoint] then
- Rayfield:Notify({
-  Title = "Error",
-  Content = "Please select a waypoint to rename!",
-  Duration = 3,
-  Image = 4483362458
- })
- return
- end
-
- Rayfield:Prompt({
-  Title = "Rename Waypoint",
-  SubTitle = "Enter new name for: " .. selectedWaypoint,
-  InputPlaceholderText = "New waypoint name",
-  InputText = selectedWaypoint,
-  Actions = {
-   Confirm = {
-    Name = "Rename",
-    Callback = function(newName)
-    if newName and newName ~= "" and newName ~= selectedWaypoint then
-    newName = tostring(newName):gsub("%s+", "_")
-
-    if waypoints[newName] then
-    Rayfield:Notify({
-     Title = "Error",
-     Content = "Waypoint name already exists!",
-     Duration = 3,
-     Image = 4483362458
-    })
-    return
-    end
-
--- Rename waypoint
-    waypoints[newName] = waypoints[selectedWaypoint]
-    waypoints[selectedWaypoint] = nil
-    selectedWaypoint = newName
-
-    refreshWaypointDisplay()
-
-    Rayfield:Notify({
-     Title = "Renamed",
-     Content = "Waypoint renamed to: " .. newName,
-     Duration = 3,
-     Image = 4483362458
-    })
-    end
-    end
-   },
-   Decline = {
-    Name = "Cancel",
-    Callback = function()
-    end
-   }
-  }
- })
- end
-})
-
-WaypointTab:CreateButton({
- Name = "🗑️ Delete Selected",
- Callback = function()
- if not selectedWaypoint or not waypoints[selectedWaypoint] then
- Rayfield:Notify({
-  Title = "Error",
-  Content = "No waypoint selected to delete!",
-  Duration = 3,
-  Image = 4483362458
- })
- return
- end
-
- Rayfield:Confirm({
-  Title = "Confirm Deletion",
-  Content = "Are you sure you want to delete waypoint:\n\"" .. selectedWaypoint .. "\"?",
-  Duration = math.huge,
-  Image = 4483362458,
-  Actions = {
-   Confirm = {
-    Name = "Yes, Delete",
-    Callback = function()
-    waypoints[selectedWaypoint] = nil
-    selectedWaypoint = nil
-    refreshWaypointDisplay()
-
-    Rayfield:Notify({
-     Title = "Deleted",
-     Content = "Waypoint deleted successfully!",
-     Duration = 3,
-     Image = 4483362458
-    })
-    end
-   },
-   Decline = {
-    Name = "Cancel",
-    Callback = function()
--- Do nothing
-    end
-   }
-  }
- })
- end
-})
-
-WaypointTab:CreateButton({
- Name = "Delete ALL Waypoints",
- Callback = function()
- if next(waypoints) == nil then
- Rayfield:Notify({
-  Title = "Info",
-  Content = "No waypoints to delete!",
-  Duration = 3,
-  Image = 4483362458
- })
- return
- end
-
- Rayfield:Confirm({
-  Title = "⚠️ WARNING ⚠️",
-  Content = "Are you SURE you want to delete ALL waypoints?\nThis action cannot be undone!",
-  Duration = math.huge,
-  Image = 4483362458,
-  Actions = {
-   Confirm = {
-    Name = "DELETE ALL",
-    Callback = function()
-    local count = 0
-    for _ in pairs(waypoints) do count = count + 1 end
-
-    waypoints = {}
-    selectedWaypoint = nil
-    refreshWaypointDisplay()
-
-    Rayfield:Notify({
-     Title = "Cleared",
-     Content = "Deleted " .. count .. " waypoint(s)!",
-     Duration = 4,
-     Image = 4483362458
-    })
-    end
-   },
-   Decline = {
-    Name = "Cancel",
-    Callback = function()
-    end
-   }
-  }
- })
- end
-})
-
-WaypointTab:CreateSection("Save & Load")
-local saveDataInput = WaypointTab:CreateInput({
- Name = "Save Data",
- PlaceholderText = "Waypoint data will appear here",
- RemoveTextAfterFocusLost = false,
- Callback = function(text)
- end
-})
-
-WaypointTab:CreateButton({
- Name = "💾 Save to Clipboard",
- Callback = function()
- if next(waypoints) == nil then
- Rayfield:Notify({
-  Title = "Error",
-  Content = "No waypoints to save!",
-  Duration = 3,
-  Image = 4483362458
- })
- return
- end
-
- local saveTable = {}
- for name, wp in pairs(waypoints) do
- saveTable[name] = {
-  x = wp.position.X,
-  y = wp.position.Y,
-  z = wp.position.Z,
-  timestamp = wp.timestamp or os.time()
- }
- end
-
- local jsonString
- local success, err = pcall(function()
-  jsonString = HttpService:JSONEncode(saveTable)
-  end)
-
- if not success then
- Rayfield:Notify({
-  Title = "Error",
-  Content = "Failed to encode waypoints: " .. tostring(err),
-  Duration = 4,
-  Image = 4483362458
- })
- return
- end
-
- saveDataInput:Set(jsonString)
-
- local clipboardSuccess = pcall(function()
-  if setclipboard then
-  setclipboard(jsonString)
-  elseif writeclipboard then
-  writeclipboard(jsonString)
-  else
-   error("No clipboard function available")
+  if not selectedWaypoint or not waypoints[selectedWaypoint] then
+   Rayfield:Notify({
+    Title = "Error",
+    Content = "No waypoint selected!",
+    Duration = 2
+   })
+   return
   end
-  end)
 
- if clipboardSuccess then
- Rayfield:Notify({
-  Title = "Saved",
-  Content = "Waypoints copied to clipboard!",
-  Duration = 3,
-  Image = 4483362458
- })
- else
+  local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+  if not hrp then return end
+
+  local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+  local tween = TweenService:Create(hrp, tweenInfo, {CFrame = waypoints[selectedWaypoint]})
+  tween:Play()
+
   Rayfield:Notify({
-  Title = "Info",
-  Content = "Waypoints data generated but not copied.\nCopy manually from the input field.",
-  Duration = 5,
-  Image = 4483362458
- })
- end
+   Title = "Teleporting",
+   Content = "Teleporting to " .. selectedWaypoint,
+   Duration = 2
+  })
  end
 })
 
 WaypointTab:CreateButton({
- Name = "📂 Load from Clipboard/Text",
+ Name = "Delete Selected Waypoint",
  Callback = function()
- local jsonString = saveDataInput.CurrentValue
+  if not selectedWaypoint or not waypoints[selectedWaypoint] then
+   Rayfield:Notify({
+    Title = "Error",
+    Content = "No waypoint selected to delete!",
+    Duration = 2
+   })
+   return
+  end
 
- if not jsonString or jsonString == "" then
- Rayfield:Notify({
-  Title = "Error",
-  Content = "No data to load! Paste data into the input field first.",
-  Duration = 4,
-  Image = 4483362458
- })
- return
- end
+  waypoints[selectedWaypoint] = nil
+  refreshWaypointDropdown()
 
- local success, data = pcall(function()
-  return HttpService:JSONDecode(jsonString)
-  end)
-
- if not success or type(data) ~= "table" then
- Rayfield:Notify({
-  Title = "Error",
-  Content = "Invalid data format! Please check your save data.",
-  Duration = 4,
-  Image = 4483362458
- })
- return
- end
-
- local loadedCount = 0
- local skippedCount = 0
- waypoints = {}
-
- for name, posData in pairs(data) do
- if type(posData) == "table" and posData.x and posData.y and posData.z then
- waypoints[name] = {
-  position = Vector3.new(posData.x, posData.y, posData.z),
-  cf = CFrame.new(posData.x, posData.y, posData.z),
-  timestamp = posData.timestamp or os.time()
- }
- loadedCount = loadedCount + 1
- else
-  skippedCount = skippedCount + 1
- end
- end
-
- selectedWaypoint = nil
- refreshWaypointDisplay()
-
- if loadedCount > 0 then
- Rayfield:Notify({
-  Title = "Loaded Successfully",
-  Content = string.format("Loaded %d waypoint(s)\nSkipped %d invalid entry(s)", loadedCount, skippedCount),
-  Duration = 4,
-  Image = 4483362458
- })
- else
   Rayfield:Notify({
-  Title = "No Valid Data",
-  Content = "No valid waypoints found in the provided data.",
-  Duration = 4,
-  Image = 4483362458
- })
- end
+   Title = "Deleted",
+   Content = "Removed " .. selectedWaypoint,
+   Duration = 2
+  })
  end
 })
-
-WaypointTab:CreateButton({
- Name = "🔄 Auto-save Current Session",
- Callback = function()
- local saveName = "AutoSave_" .. os.date("%Y%m%d_%H%M%S")
- local char = player.Character
- local hrp = char and char:FindFirstChild("HumanoidRootPart")
-
- if hrp then
- waypoints[saveName] = {
-  position = hrp.Position,
-  cf = hrp.CFrame,
-  timestamp = os.time()
- }
-
- refreshWaypointDisplay()
-
- Rayfield:Notify({
-  Title = "Auto-saved",
-  Content = "Current position saved as: " .. saveName,
-  Duration = 3,
-  Image = 4483362458
- })
- end
- end
-})
-
-refreshWaypointDisplay()
 
 return {
  MainTab = MainTab,
