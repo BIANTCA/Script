@@ -790,18 +790,26 @@ local function countWaypoints()
 end
 
 local function refreshWaypointDropdown()
+ if waypointDropdown then
+  waypointDropdown:Destroy()
+ end
+
  local options = {"None"}
  for name in pairs(waypoints) do
   table.insert(options, name)
  end
 
- waypointDropdown:Refresh(options, true)
- if selectedWaypoint and waypoints[selectedWaypoint] then
-  waypointDropdown:Set(selectedWaypoint)
- else
-  selectedWaypoint = nil
-  waypointDropdown:Set("None")
- end
+ waypointDropdown = WaypointTab:CreateDropdown({
+  Name = "Waypoint List",
+  Options = options,
+  CurrentOption = selectedWaypoint or "None",
+  Callback = function(option)
+   if typeof(option) == "table" then
+    option = option[1]
+   end
+   selectedWaypoint = (option ~= "None") and option or nil
+  end
+ })
 end
 
 WaypointTab:CreateButton({
