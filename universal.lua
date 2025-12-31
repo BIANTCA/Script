@@ -772,15 +772,22 @@ local TweenService = game:GetService("TweenService")
 
 local waypoints = {}
 local selectedWaypoint = nil
-local waypointDropdown = WaypointTab:CreateDropdown({
- Name = "Waypoint List",
- Options = {"None"},
- CurrentOption = "None",
- Callback = function(option)
-  selectedWaypoint = (option ~= "None") and option or nil
- end
-})
 
+local function createWaypointDropdown()
+ return WaypointTab:CreateDropdown({
+  Name = "Waypoint List",
+  Options = {"None"},
+  CurrentOption = "None",
+  Callback = function(option)
+   if typeof(option) == "table" then
+    option = option[1]
+   end
+   selectedWaypoint = (option ~= "None") and option or nil
+  end
+ })
+end
+
+local waypointDropdown = createWaypointDropdown()
 local function countWaypoints()
  local count = 0
  for _ in pairs(waypoints) do
@@ -792,6 +799,7 @@ end
 local function refreshWaypointDropdown()
  if waypointDropdown then
   waypointDropdown:Destroy()
+  waypointDropdown = nil
  end
 
  local options = {"None"}
@@ -813,7 +821,7 @@ local function refreshWaypointDropdown()
 end
 
 WaypointTab:CreateButton({
- Name = "Add Current Location",
+ Name = "➕ Add Current Location",
  Callback = function()
   local char = player.Character
   if not char then return end
@@ -822,9 +830,10 @@ WaypointTab:CreateButton({
 
   local name = "Waypoint_" .. tostring(countWaypoints() + 1)
   waypoints[name] = hrp.CFrame
-
   selectedWaypoint = name
+  task.wait(0.1)
   refreshWaypointDropdown()
+  task.wait(0.05)
   waypointDropdown:Set(name)
 
   Rayfield:Notify({
@@ -847,7 +856,9 @@ WaypointTab:CreateButton({
    return
   end
 
-  local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+  local char = player.Character
+  if not char then return end
+  local hrp = char:FindFirstChild("HumanoidRootPart")
   if not hrp then return end
 
   local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
@@ -875,11 +886,14 @@ WaypointTab:CreateButton({
   end
 
   waypoints[selectedWaypoint] = nil
+  selectedWaypoint = nil
+
+  task.wait(0.1)
   refreshWaypointDropdown()
 
   Rayfield:Notify({
    Title = "Deleted",
-   Content = "Removed " .. selectedWaypoint,
+   Content = "Removed waypoint successfully",
    Duration = 2
   })
  end
