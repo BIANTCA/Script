@@ -771,9 +771,10 @@ ToolsTab:CreateButton({
 local waypoints = {}
 local selectedWaypoint = nil
 local currentWaypointName = ""
+local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
 
 WaypointTab:CreateLabel("Waypoints List:")
-
 local waypointDropdown = WaypointTab:CreateDropdown({
  Name = "Select Waypoint",
  Options = {"None"},
@@ -783,16 +784,20 @@ local waypointDropdown = WaypointTab:CreateDropdown({
  end
 })
 
--- fungsi untuk refresh dropdown
 local function refreshWaypointDropdown()
  local options = {"None"}
  for name, _ in pairs(waypoints) do
   table.insert(options, name)
  end
- waypointDropdown:Refresh(options, true)
- if not selectedWaypoint or not waypoints[selectedWaypoint] then
+
+ if waypointDropdown.Refresh then
+  waypointDropdown:Refresh(options, true)
+ end
+ if (not selectedWaypoint) or (not waypoints[selectedWaypoint]) then
   selectedWaypoint = nil
-  waypointDropdown:Set("None")
+  if waypointDropdown.Set then
+   waypointDropdown:Set("None")
+  end
  end
 end
 
@@ -863,7 +868,7 @@ WaypointTab:CreateButton({
 
   local wp = waypoints[selectedWaypoint]
   local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-  local tween = game:GetService("TweenService"):Create(hrp, tweenInfo, {CFrame = wp.cf})
+  local tween = TweenService:Create(hrp, tweenInfo, {CFrame = wp.cf})
   tween:Play()
 
   Rayfield:Notify({
@@ -918,7 +923,6 @@ WaypointTab:CreateButton({
 })
 
 WaypointTab:CreateSection("Save/Load (Optional)")
-
 local saveDataText = ""
 
 WaypointTab:CreateInput({
@@ -942,9 +946,13 @@ WaypointTab:CreateButton({
    }
   end
 
-  local jsonString = game:GetService("HttpService"):JSONEncode(saveTable)
+  local jsonString = HttpService:JSONEncode(saveTable)
   saveDataText = jsonString
-  pcall(function() setclipboard(jsonString) end)
+  pcall(function()
+   if setclipboard then
+    setclipboard(jsonString)
+   end
+  end)
 
   Rayfield:Notify({
    Title = "Saved",
@@ -969,7 +977,7 @@ WaypointTab:CreateButton({
   end
 
   local success, data = pcall(function()
-   return game:GetService("HttpService"):JSONDecode(saveDataText)
+   return HttpService:JSONDecode(saveDataText)
   end)
 
   if success and type(data) == "table" then
@@ -981,6 +989,7 @@ WaypointTab:CreateButton({
     }
    end
    refreshWaypointDropdown()
+
    Rayfield:Notify({
     Title = "Loaded",
     Content = "Waypoints loaded successfully!",
