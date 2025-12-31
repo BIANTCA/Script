@@ -837,11 +837,13 @@ WaypointTab:CreateButton({
 
   local name = "Waypoint_" .. tostring(countWaypoints() + 1)
   waypoints[name] = hrp.CFrame
-
   selectedWaypoint = name
+
   refreshWaypointDropdown()
   task.defer(function()
-   waypointDropdown:Set(name)
+   if waypointDropdown then
+    waypointDropdown:Set(name)
+   end
   end)
 
   Rayfield:Notify({
