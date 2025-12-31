@@ -779,34 +779,15 @@ return #waypoints
 end
 
 local function refreshWaypointDropdown()
- local options = {"None"}
- for name in pairs(waypoints) do
-  table.insert(options, name)
- end
+if waypointDropdown then
+waypointDropdown = nil
+end
 
- if waypointDropdown then
-  -- Jika ada method Refresh (versi Rayfield terbaru)
-  if waypointDropdown.Refresh then
-   waypointDropdown:Refresh(options, selectedWaypoint or "None")
-  else
-   -- fallback: set ulang opsi dengan CurrentOption
-   waypointDropdown.Options = options
-   waypointDropdown:Set(selectedWaypoint or "None")
-  end
- else
-  -- buat dropdown baru jika belum ada
-  waypointDropdown = WaypointTab:CreateDropdown({
-   Name = "Waypoint List",
-   Options = options,
-   CurrentOption = selectedWaypoint or "None",
-   Callback = function(option)
-    if typeof(option) == "table" then
-     option = option[1]
-    end
-    selectedWaypoint = (option ~= "None") and option or nil
-   end
-  })
- end
+local options = {
+ "None"
+}
+for name in pairs(waypoints) do
+table.insert(options, name)
 end
 
 waypointDropdown = WaypointTab:CreateDropdown({
