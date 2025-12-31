@@ -791,17 +791,13 @@ end
 
 local function refreshWaypointDropdown()
  local options = {"None"}
- for name, _ in pairs(waypoints) do
+ for name in pairs(waypoints) do
   table.insert(options, name)
  end
 
- local oldSelection = selectedWaypoint
-
  waypointDropdown:Refresh(options, true)
-
- if oldSelection and waypoints[oldSelection] then
-  selectedWaypoint = oldSelection
-  waypointDropdown:Set(oldSelection)
+ if selectedWaypoint and waypoints[selectedWaypoint] then
+  waypointDropdown:Set(selectedWaypoint)
  else
   selectedWaypoint = nil
   waypointDropdown:Set("None")
