@@ -781,6 +781,14 @@ local waypointDropdown = WaypointTab:CreateDropdown({
  end
 })
 
+local function countWaypoints()
+ local count = 0
+ for _ in pairs(waypoints) do
+  count += 1
+ end
+ return count
+end
+
 local function refreshWaypointDropdown()
  local options = {"None"}
  for name, _ in pairs(waypoints) do
@@ -808,7 +816,7 @@ WaypointTab:CreateButton({
   local hrp = char:FindFirstChild("HumanoidRootPart")
   if not hrp then return end
 
-  local name = "Waypoint_" .. tostring(#waypoints + 1)
+  local name = "Waypoint_" .. tostring(countWaypoints() + 1)
   waypoints[name] = hrp.CFrame
 
   selectedWaypoint = name
