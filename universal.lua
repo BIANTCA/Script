@@ -503,7 +503,7 @@ RunService.RenderStepped:Connect(function()
  local label = distanceLabels[target]
  if not label then
  label = Instance.new("BillboardGui")
- label.Size = UDim2.new(0, 100, 0, 20)
+ label.Size = UDim2.new(0, 50, 0, 10)
  label.Adornee = head
  label.AlwaysOnTop = true
  label.Name = "DistanceLabel"
