@@ -769,148 +769,144 @@ ToolsTab:CreateButton({
 })
 
 local TweenService = game:GetService("TweenService")
-
+local player = Players.LocalPlayer
 local waypoints = {}
 local selectedWaypoint = nil
 
-local waypointDropdown = WaypointTab:CreateDropdown({
- Name = "Waypoint List",
- Options = {"None"},
- CurrentOption = "None",
- Callback = function(option)
-  if typeof(option) == "table" then
-   option = option[1]
-  end
-  selectedWaypoint = (option ~= "None") and option or nil
- end
-})
-
+local waypointDropdown
 local function countWaypoints()
- local count = 0
- for _ in pairs(waypoints) do
-  count += 1
- end
- return count
+return #waypoints
 end
 
 local function refreshWaypointDropdown()
- if waypointDropdown and waypointDropdown.Callback then
-  waypointDropdown.Callback = function() end
+if waypointDropdown then
+waypointDropdown:Destroy()
+waypointDropdown = nil
+end
+
+local options = {
+ "None"
+}
+for name in pairs(waypoints) do
+table.insert(options, name)
+end
+
+waypointDropdown = WaypointTab:CreateDropdown({
+ Name = "Waypoint List",
+ Options = options,
+ CurrentOption = selectedWaypoint or "None",
+ Callback = function(option)
+ if typeof(option) == "table" then
+ option = option[1]
  end
-
- if waypointDropdown then
-  waypointDropdown:Destroy()
-  waypointDropdown = nil
+ selectedWaypoint = (option ~= "None") and option or nil
  end
+})
 
- task.defer(function()
-  local options = {"None"}
-  for name in pairs(waypoints) do
-   table.insert(options, name)
-  end
-
-  waypointDropdown = WaypointTab:CreateDropdown({
-   Name = "Waypoint List",
-   Options = options,
-   CurrentOption = selectedWaypoint or "None",
-   Callback = function(option)
-    if typeof(option) == "table" then
-     option = option[1]
-    end
-    selectedWaypoint = (option ~= "None") and option or nil
-   end
-  })
-
-  task.defer(function()
-   if selectedWaypoint and waypoints[selectedWaypoint] then
-    waypointDropdown:Set(selectedWaypoint)
-   else
-    waypointDropdown:Set("None")
-   end
-  end)
+task.defer(function()
+ if selectedWaypoint and waypoints[selectedWaypoint] then
+ waypointDropdown:Set(selectedWaypoint)
+ else
+  waypointDropdown:Set("None")
+ selectedWaypoint = nil
+ end
  end)
+end
+
+local function getHumanoidRootPart()
+local character = player.Character or player.CharacterAdded:Wait()
+return character:FindFirstChild("HumanoidRootPart")
 end
 
 WaypointTab:CreateButton({
  Name = "Add Current Location",
  Callback = function()
-  local char = player.Character
-  if not char then return end
-  local hrp = char:FindFirstChild("HumanoidRootPart")
-  if not hrp then return end
+ local hrp = getHumanoidRootPart()
+ if not hrp then
+ Rayfield:Notify({
+  Title = "Error",
+  Content = "Character or HumanoidRootPart not found!",
+  Duration = 3
+ })
+ return
+ end
 
-  local name = "Waypoint_" .. tostring(countWaypoints() + 1)
-  waypoints[name] = hrp.CFrame
-  selectedWaypoint = name
+ local name = "Waypoint_" .. tostring(countWaypoints() + 1)
+ waypoints[name] = hrp.CFrame
+ selectedWaypoint = name
 
-  refreshWaypointDropdown()
-  task.defer(function()
-   if waypointDropdown then
-    waypointDropdown:Set(name)
-   end
-  end)
+ refreshWaypointDropdown()
 
-  Rayfield:Notify({
-   Title = "Waypoint Added",
-   Content = "Added: " .. name,
-   Duration = 2
-  })
+ Rayfield:Notify({
+  Title = "Waypoint Added",
+  Content = "Added: " .. name,
+  Duration = 2
+ })
  end
 })
 
 WaypointTab:CreateButton({
  Name = "Teleport to Selected",
  Callback = function()
-  if not selectedWaypoint or not waypoints[selectedWaypoint] then
-   Rayfield:Notify({
-    Title = "Error",
-    Content = "No waypoint selected!",
-    Duration = 2
-   })
-   return
-  end
+ if not selectedWaypoint or not waypoints[selectedWaypoint] then
+ Rayfield:Notify({
+  Title = "Error",
+  Content = "No waypoint selected!",
+  Duration = 3
+ })
+ return
+ end
 
-  local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-  if not hrp then return end
+ local hrp = getHumanoidRootPart()
+ if not hrp then
+ Rayfield:Notify({
+  Title = "Error",
+  Content = "Character or HumanoidRootPart not found!",
+  Duration = 3
+ })
+ return
+ end
 
-  local tween = TweenService:Create(
-   hrp,
-   TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-   {CFrame = waypoints[selectedWaypoint]}
-  )
-  tween:Play()
+ local tween = TweenService:Create(
+  hrp,
+  TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+  {
+   CFrame = waypoints[selectedWaypoint]}
+ )
+ tween:Play()
 
-  Rayfield:Notify({
-   Title = "Teleporting",
-   Content = "Teleporting to " .. selectedWaypoint,
-   Duration = 2
-  })
+ Rayfield:Notify({
+  Title = "Teleporting",
+  Content = "Teleporting to " .. selectedWaypoint,
+  Duration = 2
+ })
  end
 })
 
 WaypointTab:CreateButton({
  Name = "Delete Selected Waypoint",
  Callback = function()
-  if not selectedWaypoint or not waypoints[selectedWaypoint] then
-   Rayfield:Notify({
-    Title = "Error",
-    Content = "No waypoint selected to delete!",
-    Duration = 2
-   })
-   return
-  end
+ if not selectedWaypoint or not waypoints[selectedWaypoint] then
+ Rayfield:Notify({
+  Title = "Error",
+  Content = "No waypoint selected to delete!",
+  Duration = 3
+ })
+ return
+ end
 
-  waypoints[selectedWaypoint] = nil
-  selectedWaypoint = nil
-  refreshWaypointDropdown()
+ waypoints[selectedWaypoint] = nil
+ selectedWaypoint = nil
+ refreshWaypointDropdown()
 
-  Rayfield:Notify({
-   Title = "Deleted",
-   Content = "Waypoint removed successfully",
-   Duration = 2
-  })
+ Rayfield:Notify({
+  Title = "Deleted",
+  Content = "Waypoint removed successfully",
+  Duration = 2
+ })
  end
 })
+refreshWaypointDropdown()
 
 return {
  MainTab = MainTab,
