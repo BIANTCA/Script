@@ -998,4 +998,11 @@ WaypointTab:CreateButton({
  end
 })
 
+return {
+ MainTab = MainTab,
+ ToolsTab = ToolsTab,
+ WaypointTab = WaypointTab
+}
+end
+
 return Universal
