@@ -11,7 +11,8 @@ local mouse = player:GetMouse()
 local TeleportService = game:GetService("TeleportService")
 
 local MainTab = _G.MainTab or Window:CreateTab("Main", 4483362458)
-local ToolsTab = Window:CreateTab("Tools", 4483362458)
+local ToolsTab = _G.ToolsTab or Window:CreateTab("Tools", 4483362458)
+local SessionTab = _G.SessionTab or Window:CreateTab("Session", 4483362458)
 
 -- ======== MAIN TAB ========
 local noclipConn
@@ -668,18 +669,18 @@ local antiAFKConn, antiHooked, oldNamecall
 
 ToolsTab:CreateSection("Tools utility")
 ToolsTab:CreateButton({
- Name = "Spawn Delete Tool",
+ Name = "Delete Tool",
  Callback = function()
-  local tool = Instance.new("Tool")
-  tool.Name = "Delete Tool"
-  tool.RequiresHandle = false
-  tool.Parent = player.Backpack
+ local tool = Instance.new("Tool")
+ tool.Name = "Delete Tool"
+ tool.RequiresHandle = false
+ tool.Parent = player.Backpack
 
-  tool.Activated:Connect(function()
-   local target = mouse.Target
-   if target and not target:IsDescendantOf(player.Character) then
-    target:Destroy()
-   end
+ tool.Activated:Connect(function()
+  local target = mouse.Target
+  if target and not target:IsDescendantOf(player.Character) then
+  target:Destroy()
+  end
   end)
  end
 })
@@ -687,18 +688,18 @@ ToolsTab:CreateButton({
 ToolsTab:CreateButton({
  Name = "Bring Tool",
  Callback = function()
-  local tool = Instance.new("Tool")
-  tool.Name = "Bring Tool"
-  tool.RequiresHandle = false
-  tool.Parent = player.Backpack
+ local tool = Instance.new("Tool")
+ tool.Name = "Bring Tool"
+ tool.RequiresHandle = false
+ tool.Parent = player.Backpack
 
-  tool.Activated:Connect(function()
-   local target = mouse.Target
-   local char = player.Character
-   local root = char and char:FindFirstChild("HumanoidRootPart")
-   if root and target and target:IsA("BasePart") and not target:IsDescendantOf(char) then
-    target.CFrame = root.CFrame * CFrame.new(0,0,-5)
-   end
+ tool.Activated:Connect(function()
+  local target = mouse.Target
+  local char = player.Character
+  local root = char and char:FindFirstChild("HumanoidRootPart")
+  if root and target and target:IsA("BasePart") and not target:IsDescendantOf(char) then
+  target.CFrame = root.CFrame * CFrame.new(0,0,-5)
+  end
   end)
  end
 })
@@ -706,18 +707,74 @@ ToolsTab:CreateButton({
 ToolsTab:CreateButton({
  Name = "TP Tool",
  Callback = function()
-  local tool = Instance.new("Tool")
-  tool.Name = "Teleport"
-  tool.RequiresHandle = false
-  tool.Parent = player.Backpack
+ local tool = Instance.new("Tool")
+ tool.Name = "Teleport"
+ tool.RequiresHandle = false
+ tool.Parent = player.Backpack
 
-  tool.Activated:Connect(function()
-   local target = mouse.Hit
-   local char = player.Character
-   local root = char and char:FindFirstChild("HumanoidRootPart")
-   if root and target then
-    root.CFrame = CFrame.new(target.Position + Vector3.new(0,3,0))
-   end
+ tool.Activated:Connect(function()
+  local target = mouse.Hit
+  local char = player.Character
+  local root = char and char:FindFirstChild("HumanoidRootPart")
+  if root and target then
+  root.CFrame = CFrame.new(target.Position + Vector3.new(0,3,0))
+  end
+  end)
+ end
+})
+
+local copyTool
+ToolsTab:CreateButton({
+ Name = "Copy Tool",
+ Callback = function()
+ if copyTool then return end
+
+ copyTool = Instance.new("Tool")
+ copyTool.Name = "Copy Tool"
+ copyTool.RequiresHandle = false
+ copyTool.Parent = player.Backpack
+
+ copyTool.Activated:Connect(function()
+  local target = mouse.Target
+  local char = player.Character
+  local root = char and char:FindFirstChild("HumanoidRootPart")
+
+  if target and root and not target:IsDescendantOf(char) then
+  local clone = target:Clone()
+  clone.Parent = target.Parent
+
+  if clone:IsA("BasePart") then
+  clone.CFrame = root.CFrame * CFrame.new(0, 0, -6)
+  end
+  end
+  end)
+ end
+})
+
+local scaleTool
+local scaleUp = 1.2
+local scaleDown = 0.8
+local UIS = game:GetService("UserInputService")
+ToolsTab:CreateButton({
+ Name = "Scale Tool (+ / -)",
+ Callback = function()
+ if scaleTool then return end
+
+ scaleTool = Instance.new("Tool")
+ scaleTool.Name = "Scale Tool"
+ scaleTool.RequiresHandle = false
+ scaleTool.Parent = player.Backpack
+
+ scaleTool.Activated:Connect(function()
+  local target = mouse.Target
+  if not target or not target:IsA("BasePart") then return end
+  if target:IsDescendantOf(player.Character) then return end
+
+  local cf = target.CFrame
+  local factor = UIS:IsKeyDown(Enum.KeyCode.LeftShift) and scaleDown or scaleUp
+
+  target.Size = target.Size * factor
+  target.CFrame = cf
   end)
  end
 })
@@ -762,15 +819,32 @@ ToolsTab:CreateToggle({
  end
 })
 
-ToolsTab:CreateSection("Session control")
-ToolsTab:CreateButton({
+--==SESSION TAB==--
+SessionTab:CreateSection("Information")
+SessionTab:CreateParagraph({
+ Title = "Universal Script",
+ Content = "This script includes a universal script framework. Some features in MainTab, ToolsTab, and SessionTab may not be fully compatible with this game and could not work as intended."
+})
+
+SessionTab:CreateSection("Session control")
+SessionTab:CreateButton({
  Name = "Rejoin Server",
  Callback = function()
  TeleportService:Teleport(game.PlaceId, player)
  end
 })
 
-ToolsTab:CreateButton({
+SessionTab:CreateButton({
+ Name = "Force Respawn",
+ Callback = function()
+ local char = player.Character
+ if char then
+ char:BreakJoints()
+ end
+ end
+})
+
+SessionTab:CreateButton({
  Name = "Close & Destroy GUI",
  Callback = function()
  if Rayfield then Rayfield:Destroy() end
@@ -780,6 +854,7 @@ ToolsTab:CreateButton({
 return {
  MainTab = MainTab,
  ToolsTab = ToolsTab,
+ SessionTab = SessionTab,
 }
 end
 
