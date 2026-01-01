@@ -664,55 +664,65 @@ MainTab:CreateToggle({
 })
 
 -- ======== TOOLS TAB ========
-local deleteTool, bringTool, antiAFKConn, antiHooked, oldNamecall
+local antiAFKConn, antiHooked, oldNamecall
 
 ToolsTab:CreateSection("Tools utility")
-ToolsTab:CreateToggle({
- Name = "Delete Tool",
- CurrentValue = false,
- Callback = function(v)
- if v then
- if deleteTool then return end
- deleteTool = Instance.new("Tool")
- deleteTool.Name = "Delete Tool"
- deleteTool.RequiresHandle = false
- deleteTool.Parent = player.Backpack
- deleteTool.Activated:Connect(function()
-  local target = mouse.Target
-  if target and not target:IsDescendantOf(player.Character) then
-  target:Destroy()
-  end
+ToolsTab:CreateButton({
+ Name = "Spawn Delete Tool",
+ Callback = function()
+  local tool = Instance.new("Tool")
+  tool.Name = "Delete Tool"
+  tool.RequiresHandle = false
+  tool.Parent = player.Backpack
+
+  tool.Activated:Connect(function()
+   local target = mouse.Target
+   if target and not target:IsDescendantOf(player.Character) then
+    target:Destroy()
+   end
   end)
- else
-  if deleteTool then deleteTool:Destroy() deleteTool = nil end
- end
  end
 })
 
-ToolsTab:CreateToggle({
+ToolsTab:CreateButton({
  Name = "Bring Tool",
- CurrentValue = false,
- Callback = function(v)
- if v then
- if bringTool then return end
- bringTool = Instance.new("Tool")
- bringTool.Name = "Bring Tool"
- bringTool.RequiresHandle = false
- bringTool.Parent = player.Backpack
- bringTool.Activated:Connect(function()
-  local target = mouse.Target
-  local char = player.Character
-  local root = char and char:FindFirstChild("HumanoidRootPart")
-  if root and target and target:IsA("BasePart") and not target:IsDescendantOf(char) then
-  target.CFrame = root.CFrame * CFrame.new(0,0,-5)
-  end
+ Callback = function()
+  local tool = Instance.new("Tool")
+  tool.Name = "Bring Tool"
+  tool.RequiresHandle = false
+  tool.Parent = player.Backpack
+
+  tool.Activated:Connect(function()
+   local target = mouse.Target
+   local char = player.Character
+   local root = char and char:FindFirstChild("HumanoidRootPart")
+   if root and target and target:IsA("BasePart") and not target:IsDescendantOf(char) then
+    target.CFrame = root.CFrame * CFrame.new(0,0,-5)
+   end
   end)
- else
-  if bringTool then bringTool:Destroy() bringTool = nil end
- end
  end
 })
 
+ToolsTab:CreateButton({
+ Name = "TP Tool",
+ Callback = function()
+  local tool = Instance.new("Tool")
+  tool.Name = "Teleport"
+  tool.RequiresHandle = false
+  tool.Parent = player.Backpack
+
+  tool.Activated:Connect(function()
+   local target = mouse.Hit
+   local char = player.Character
+   local root = char and char:FindFirstChild("HumanoidRootPart")
+   if root and target then
+    root.CFrame = CFrame.new(target.Position + Vector3.new(0,3,0))
+   end
+  end)
+ end
+})
+
+ToolsTab:CreateSection("Session Protection")
 ToolsTab:CreateToggle({
  Name = "Anti AFK",
  CurrentValue = false,
@@ -763,7 +773,7 @@ ToolsTab:CreateButton({
 ToolsTab:CreateButton({
  Name = "Close & Destroy GUI",
  Callback = function()
- if Window then Window:Destroy() end
+ if Rayfield then Rayfield:Destroy() end
  end
 })
 
