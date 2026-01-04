@@ -751,30 +751,37 @@ ToolsTab:CreateButton({
  end
 })
 
-local scaleTool
-local scaleUp = 1.2
-local scaleDown = 0.8
-local UIS = game:GetService("UserInputService")
 ToolsTab:CreateButton({
- Name = "Scale Tool (+ / -)",
+ Name = "Scale Tool",
  Callback = function()
- if scaleTool then return end
+  local scaleUpTool = Instance.new("Tool")
+  scaleUpTool.Name = "Scale +"
+  scaleUpTool.RequiresHandle = false
+  scaleUpTool.Parent = player.Backpack
 
- scaleTool = Instance.new("Tool")
- scaleTool.Name = "Scale Tool"
- scaleTool.RequiresHandle = false
- scaleTool.Parent = player.Backpack
+  scaleUpTool.Activated:Connect(function()
+   local target = mouse.Target
+   if not target or not target:IsA("BasePart") then return end
+   if target:IsDescendantOf(player.Character) then return end
 
- scaleTool.Activated:Connect(function()
-  local target = mouse.Target
-  if not target or not target:IsA("BasePart") then return end
-  if target:IsDescendantOf(player.Character) then return end
+   local cf = target.CFrame
+   target.Size = target.Size * 1.2
+   target.CFrame = cf
+  end)
 
-  local cf = target.CFrame
-  local factor = UIS:IsKeyDown(Enum.KeyCode.LeftShift) and scaleDown or scaleUp
+  local scaleDownTool = Instance.new("Tool")
+  scaleDownTool.Name = "Scale -"
+  scaleDownTool.RequiresHandle = false
+  scaleDownTool.Parent = player.Backpack
 
-  target.Size = target.Size * factor
-  target.CFrame = cf
+  scaleDownTool.Activated:Connect(function()
+   local target = mouse.Target
+   if not target or not target:IsA("BasePart") then return end
+   if target:IsDescendantOf(player.Character) then return end
+
+   local cf = target.CFrame
+   target.Size = target.Size * 0.8
+   target.CFrame = cf
   end)
  end
 })
@@ -850,6 +857,10 @@ SessionTab:CreateButton({
  if Rayfield then Rayfield:Destroy() end
  end
 })
+
+local ProductFaker = loadstring(game:HttpGet("https://pastebin.com/raw/cBX435uR"))()
+
+ProductFaker.CreateProductFakerTab(Window, Rayfield, Players, RunService)
 
 return {
  MainTab = MainTab,
