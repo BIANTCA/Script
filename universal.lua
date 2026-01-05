@@ -665,24 +665,12 @@ MainTab:CreateToggle({
 })
 
 -- ======== TOOLS TAB ========
-local remoteTabInstance = nil
-
 ToolsTab:CreateSection("More Tools")
-ToolsTab:CreateToggle({
+ToolsTab:CreateButton({
  Name = "Remote Tools",
- CurrentValue = false,
- Callback = function(v)
-  if v then
-   local RemoteLogger = loadstring(game:HttpGet("https://pastebin.com/raw/3C5BF1cc"))()
-   remoteTabInstance = RemoteLogger.CreateFireTab(Window, Rayfield)
-  else
-   if remoteTabInstance and remoteTabInstance.Tab and remoteTabInstance.Tab.Destroy then
-    pcall(function()
-     remoteTabInstance.Tab:Destroy()
-    end)
-    remoteTabInstance = nil
-   end
-  end
+ Callback = function()
+  local RemoteLogger = loadstring(game:HttpGet("https://pastebin.com/raw/3C5BF1cc"))()
+  RemoteLogger.CreateFireTab(Window, Rayfield)
  end
 })
 
