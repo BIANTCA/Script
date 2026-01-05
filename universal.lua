@@ -858,9 +858,7 @@ SessionTab:CreateButton({
  end
 })
 
-local ProductFaker = loadstring(game:HttpGet("https://pastebin.com/raw/cBX435uR"))()
-
-ProductFaker.CreateProductFakerTab(Window, Rayfield, Players, RunService)
+loadstring(game:HttpGet("https://pastebin.com/raw/cBX435uR"))()
 
 return {
  MainTab = MainTab,
