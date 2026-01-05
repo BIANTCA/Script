@@ -668,19 +668,21 @@ MainTab:CreateToggle({
 local remoteTabInstance = nil
 
 ToolsTab:CreateToggle({
-	Name = "Remote Tools",
-	CurrentValue = false,
-	Callback = function(v)
-		if v then
-			local RemoteLogger = loadstring(game:HttpGet("https://pastebin.com/raw/3C5BF1cc"))()
-			remoteTabInstance = RemoteLogger.CreateRemoteLoggerTab(Window, Rayfield, Players, RunService)
-		else
-			if remoteTabInstance and remoteTabInstance.Tab and remoteTabInstance.Tab.Destroy then
-				remoteTabInstance.Tab:Destroy()
-				remoteTabInstance = nil
-			end
-		end
-	end
+ Name = "Remote Tools",
+ CurrentValue = false,
+ Callback = function(v)
+  if v then
+   local RemoteLogger = loadstring(game:HttpGet("https://pastebin.com/raw/3C5BF1cc"))()
+   remoteTabInstance = RemoteLogger.CreateRemoteLoggerTab(Window, Rayfield, Players, RunService)
+  else
+   if remoteTabInstance and remoteTabInstance.Tab and remoteTabInstance.Tab.Destroy then
+    pcall(function()
+     remoteTabInstance.Tab:Destroy()
+    end)
+    remoteTabInstance = nil
+   end
+  end
+ end
 })
 
 local antiAFKConn, antiHooked, oldNamecall
