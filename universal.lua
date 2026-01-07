@@ -667,7 +667,7 @@ MainTab:CreateToggle({
 -- ======== TOOLS TAB ========
 ToolsTab:CreateSection("More Tools")
 ToolsTab:CreateButton({
- Name = "Remote Fire",
+ Name = "Remote Executor",
  Callback = function()
   local RemoteLogger = loadstring(game:HttpGet("https://pastebin.com/raw/3C5BF1cc"))()
   RemoteLogger.CreateFireTab(Window, Rayfield)
@@ -803,8 +803,15 @@ ToolsTab:CreateButton({
  end
 })
 
-ToolsTab:CreateSection("Session Protection")
-ToolsTab:CreateToggle({
+--==SESSION TAB==--
+SessionTab:CreateSection("Information")
+SessionTab:CreateParagraph({
+ Title = "Universal Script",
+ Content = "This script includes a universal script framework. Some features in MainTab, ToolsTab, and SessionTab may not be fully compatible with this game and could not work as intended."
+})
+
+SessionTab:CreateSection("Session Protection")
+SessionTab:CreateToggle({
  Name = "Anti AFK",
  CurrentValue = false,
  Callback = function(v)
@@ -820,7 +827,7 @@ ToolsTab:CreateToggle({
  end
 })
 
-ToolsTab:CreateToggle({
+SessionTab:CreateToggle({
  Name = "Anti Kick / Ban",
  CurrentValue = false,
  Callback = function(v)
@@ -841,13 +848,6 @@ ToolsTab:CreateToggle({
  antiHooked = false
  end
  end
-})
-
---==SESSION TAB==--
-SessionTab:CreateSection("Information")
-SessionTab:CreateParagraph({
- Title = "Universal Script",
- Content = "This script includes a universal script framework. Some features in MainTab, ToolsTab, and SessionTab may not be fully compatible with this game and could not work as intended."
 })
 
 SessionTab:CreateSection("Session control")
