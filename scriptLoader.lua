@@ -1,1 +1,159 @@
-local v0=loadstring(game:HttpGet("https://sirius.menu/rayfield"))();local v1=game:GetService("HttpService");local v2=game:GetService("MarketplaceService");local v3;local v4,v5=pcall(function() return v2:GetProductInfo(game.PlaceId);end);v3=(v4 and v5 and v5.Name) or "Unknown Game" ;local v6=v0:CreateWindow({Name="Auto Script",LoadingTitle="Auto Script",LoadingSubtitle="By Scriptblox",ConfigurationSaving={Enabled=false}});local v7=v6:CreateTab("Main",4483362458 -0 );_G.MainTab=v7;local v8=v6:CreateTab("Script",4853750673 -370388215 );v8:CreateSection("Game: "   .. v3 );local function v9(v14) local v15=0;local v16;local v17;local v18;local v19;local v20;while true do if (v15==(0 -0)) then v16="https://scriptblox.com/api/script/search?q="   .. v1:UrlEncode(v14) ;v17,v18=pcall(function() return game:HttpGet(v16);end);v15=351 -(87 + 263) ;end if (v15==1) then if  not v17 then local v34=0;while true do if (v34==(180 -(67 + 113))) then v0:Notify({Title="Error",Content="Failed to fetch data from ScriptBlox.",Duration=3 + 1 });return nil;end end end v19,v20=pcall(function() return v1:JSONDecode(v18);end);v15=4 -2 ;end if (v15==(2 + 0)) then if ( not v19 or  not v20.result or  not v20.result.scripts) then local v35=0 -0 ;while true do if (v35==0) then v0:Notify({Title="Error",Content="Invalid JSON format.",Duration=956 -(802 + 150) });return nil;end end end return v20.result.scripts;end end end local function v10(v21) local v22="";for v25,v26 in pairs(v21) do if ((v25~="script") and (v25~="slug") and (v25~="matched") and (v25~="game") and (v25~="lastBump") and (v25~="image") and (v25~="_id") and (v25~="createdAt")) then if (typeof(v26)=="table") then local v36=0 -0 ;while true do if (v36==(0 -0)) then v22=v22   .. v25   .. ":\n" ;for v40,v41 in pairs(v26) do v22=v22   .. "  "   .. tostring(v40)   .. ": "   .. tostring(v41)   .. "\n" ;end break;end end else v22=v22   .. v25   .. ": "   .. tostring(v26)   .. "\n" ;end end end return v22;end local function v11(v23) for v27,v28 in ipairs(v23) do local v29=0 + 0 ;local v30;local v31;local v32;while true do if (v29==(998 -(915 + 82))) then v31="["   .. v27   .. "] "   .. (v28.title or "Untitled") ;v32=v10(v28);v29=5 -3 ;end if (v29==(0 + 0)) then v30=(v28.game and v28.game.name) or "Unknown Game" ;v8:CreateSection(v30);v29=1 -0 ;end if (v29==2) then v8:CreateParagraph({Title=v31,Content=v32});v8:CreateButton({Name="Run Script",Info="Start",Interact="Start",Callback=function() local v37=0;local v38;while true do if (v37==0) then v38=v28.script;if (v38 and (v38~="")) then local v42=1187 -(1069 + 118) ;local v43;local v44;while true do if (v42==(0 -0)) then v43,v44=pcall(function() loadstring(v38)();end);if v43 then v0:Notify({Title="Success",Content="Script executed successfully!",Duration=6 -3 });else v0:Notify({Title="Error",Content="Failed to execute script: "   .. tostring(v44) ,Duration=1 + 3 });end break;end end else v0:Notify({Title="Empty",Content="This script has no runnable code.",Duration=4 -1 });end break;end end end});break;end end end end v8:CreateButton({Name="Refresh Scripts",Callback=function() local v24=v9(v3);if v24 then local v33=0;while true do if (v33==(0 + 0)) then v0:Notify({Title="Updated",Content="ScriptBlox data refreshed successfully.",Duration=3});v11(v24);break;end end end end});local v12=v9(v3);if v12 then v11(v12);end local v13=loadstring(game:HttpGet("https://raw.githubusercontent.com/BIANTCA/Script/refs/heads/main/universal.lua"))();v13.CreateUniversalTab(v6,v0,game:GetService("Players"),game:GetService("RunService"));
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local HttpService = game:GetService("HttpService")
+local MarketplaceService = game:GetService("MarketplaceService")
+
+local gameInfo
+local ok, info = pcall(function()
+ return MarketplaceService:GetProductInfo(game.PlaceId)
+end)
+gameInfo = (ok and info and info.Name) or "Unknown Game"
+
+local Window = Rayfield:CreateWindow({
+ Name = "Auto Script",
+ LoadingTitle = "Auto Script",
+ LoadingSubtitle = "By Scriptblox",
+ ConfigurationSaving = { Enabled = false },
+})
+
+local MainTab = Window:CreateTab("Main", 4483362458)
+_G.MainTab = MainTab
+local ScriptTab = Window:CreateTab("Script", 4483362458)
+
+ScriptTab:CreateSection("ScriptBlox Search")
+local currentQuery = gameInfo
+
+ScriptTab:CreateInput({
+ Name = "Search Script: " .. gameInfo,
+ PlaceholderText = "Game name",
+ RemoveTextAfterFocusLost = false,
+ CurrentValue = currentQuery,
+ Callback = function(value)
+  currentQuery = value
+  Rayfield:Notify({
+   Title = "Search Updated",
+   Content = "Search query set to: " .. tostring(value),
+   Duration = 2
+  })
+ end
+})
+
+local function fetchScripts(query)
+ local url = "https://scriptblox.com/api/script/search?q=" .. HttpService:UrlEncode(query)
+ local success, result = pcall(function()
+  return game:HttpGet(url)
+ end)
+
+ if not success then
+  Rayfield:Notify({
+   Title = "Error",
+   Content = "Failed to fetch data from ScriptBlox.",
+   Duration = 4
+  })
+  return nil
+ end
+
+ local ok, data = pcall(function()
+  return HttpService:JSONDecode(result)
+ end)
+
+ if not ok or not data.result or not data.result.scripts then
+  Rayfield:Notify({
+   Title = "Error",
+   Content = "Invalid JSON format.",
+   Duration = 4
+  })
+  return nil
+ end
+
+ return data.result.scripts
+end
+
+local function tableToText(tbl)
+ local content = ""
+ for k, v in pairs(tbl) do
+  if k ~= "script"
+  and k ~= "slug"
+  and k ~= "matched"
+  and k ~= "game"
+  and k ~= "lastBump"
+  and k ~= "image"
+  and k ~= "_id"
+  and k ~= "createdAt" then
+   if typeof(v) == "table" then
+    content = content .. k .. ":\n"
+    for subk, subv in pairs(v) do
+     content = content .. "  " .. tostring(subk) .. ": " .. tostring(subv) .. "\n"
+    end
+   else
+    content = content .. k .. ": " .. tostring(v) .. "\n"
+   end
+  end
+ end
+ return content
+end
+
+local function showScripts(scripts)
+ for i, s in ipairs(scripts) do
+  local gameName = (s.game and s.game.name) or "Unknown Game"
+  ScriptTab:CreateSection(gameName)
+
+  local title = "[" .. i .. "] " .. (s.title or "Untitled")
+  local paragraphText = tableToText(s)
+
+  ScriptTab:CreateParagraph({
+   Title = title,
+   Content = paragraphText
+  })
+
+  ScriptTab:CreateButton({
+   Name = "Run Script",
+   Info = "Start",
+   Interact = "Start",
+   Callback = function()
+    local code = s.script
+    if code and code ~= "" then
+     local ok, err = pcall(function()
+      loadstring(code)()
+     end)
+     if ok then
+      Rayfield:Notify({
+       Title = "Success",
+       Content = "Script executed successfully!",
+       Duration = 3
+      })
+     else
+      Rayfield:Notify({
+       Title = "Error",
+       Content = "Failed to execute script: " .. tostring(err),
+       Duration = 4
+      })
+     end
+    else
+     Rayfield:Notify({
+      Title = "Empty",
+      Content = "This script has no runnable code.",
+      Duration = 3
+     })
+    end
+   end
+  })
+ end
+end
+
+ScriptTab:CreateButton({
+ Name = "Load Scripts",
+ Callback = function()
+  local scripts = fetchScripts(currentQuery)
+  if scripts then
+   Rayfield:Notify({
+    Title = "Updated",
+    Content = "ScriptBlox data refreshed for: " .. tostring(currentQuery),
+    Duration = 3
+   })
+   showScripts(scripts)
+  end
+ end
+})
+
+local Universal = loadstring(game:HttpGet("https://raw.githubusercontent.com/BIANTCA/Script/refs/heads/main/universal.lua"))()
+Universal.CreateUniversalTab(Window, Rayfield, game:GetService("Players"), game:GetService("RunService"))
