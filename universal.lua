@@ -16,18 +16,10 @@ local SessionTab = _G.SessionTab or Window:CreateTab("Session", 4483362458)
 --==UniTab==--
 UniTab:CreateSection("Main Menu")
 UniTab:CreateButton({
- Name = "Character Tab",
- Callback = function()
-  local charTab = loadstring(game:HttpGet("https://pastebin.com/raw/QqHFC3xm"))()
-  charTab.CreateMainTab(Window, Rayfield)
- end
-})
-
-UniTab:CreateButton({
  Name = "Visual Tab",
  Callback = function()
   local visualTab = loadstring(game:HttpGet("https://pastebin.com/raw/jb37dqiW"))()
-  visualTab.CreateVisualTab(Window, Rayfield)
+  visualTab.CreateVisualTab(Window, Rayfield, Players, RunService)
  end
 })
 
@@ -35,7 +27,7 @@ UniTab:CreateButton({
  Name = "Tools Tab",
  Callback = function()
   local toolsTab = loadstring(game:HttpGet("https://pastebin.com/raw/F2sM2itv"))()
-  toolsTab.CreateVisualTab(Window, Rayfield)
+  toolsTab.CreateVisualTab(Window, Rayfield, Players, RunService)
  end
 })
 
@@ -128,6 +120,8 @@ SessionTab:CreateButton({
  end
 })
 
+local charTab = loadstring(game:HttpGet("https://pastebin.com/raw/QqHFC3xm"))()
+charTab.CreateMainTab(Window, Rayfield, Players, RunService)
 loadstring(game:HttpGet("https://pastebin.com/raw/cBX435uR"))()
 
 return {
