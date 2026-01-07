@@ -27,7 +27,7 @@ UniTab:CreateButton({
  Name = "Tools Tab",
  Callback = function()
   local toolsTab = loadstring(game:HttpGet("https://pastebin.com/raw/F2sM2itv"))()
-  toolsTab.CreateVisualTab(Window, Rayfield, Players, RunService)
+  toolsTab.CreateVisualTab(Window, Rayfield, Players)
  end
 })
 
