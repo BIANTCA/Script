@@ -667,10 +667,18 @@ MainTab:CreateToggle({
 -- ======== TOOLS TAB ========
 ToolsTab:CreateSection("More Tools")
 ToolsTab:CreateButton({
- Name = "Remote Tools",
+ Name = "Remote Fire",
  Callback = function()
   local RemoteLogger = loadstring(game:HttpGet("https://pastebin.com/raw/3C5BF1cc"))()
   RemoteLogger.CreateFireTab(Window, Rayfield)
+ end
+})
+
+ToolsTab:CreateButton({
+ Name = "Remote Listener",
+ Callback = function()
+  local RemoteListen = loadstring(game:HttpGet("https://pastebin.com/raw/r8JTcWjx"))()
+  RemoteListen.CreateListenerTab(Window, Rayfield)
  end
 })
 
