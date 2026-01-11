@@ -10,6 +10,7 @@ local UserInputService = game:GetService("UserInputService")
 local mouse = player:GetMouse()
 local TeleportService = game:GetService("TeleportService")
 
+local MainTab = _G.MainTab or Window:CreateTab("Main", 4483362458)
 local UniTab = _G.ToolsTab or Window:CreateTab("UniTab", 4483362458)
 local SessionTab = _G.SessionTab or Window:CreateTab("Session", 4483362458)
 
@@ -125,6 +126,7 @@ charTab.CreateMainTab(Window, Rayfield, Players, RunService)
 loadstring(game:HttpGet("https://pastebin.com/raw/cBX435uR"))()
 
 return {
+ MainTab = MainTab,
  UniTab = UniTab,
  SessionTab = SessionTab,
 }
