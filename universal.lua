@@ -50,7 +50,7 @@ UniTab:CreateButton({
 })
 
 UniTab:CreateButton({
- Name = "DEX/EXPLORER",
+ Name = "Dex/Explorer",
  Callback = function()
   loadstring(game:HttpGet("https://raw.githubusercontent.com/infyiff/backup/main/dex.lua"))()
  end
