@@ -1,1 +1,120 @@
-local v0=loadstring(game:HttpGet("https://sirius.menu/rayfield"))();local v1=v0:CreateWindow({Name="Game Actions AutoFarm GUI",LoadingTitle="Rayfield Interface",LoadingSubtitle="by GANTJENK",ConfigurationSaving={Enabled=false}});local v2=v1:CreateTab("Main",4483362458);local v3=game:GetService("ReplicatedStorage");local v4=game:GetService("Players");local v5=v4.LocalPlayer;local v6=false;local v7=0.5;v2:CreateSection("Automatically");v2:CreateToggle({Name="AutoFarm",CurrentValue=false,Callback=function(v8) v6=v8;if v8 then task.spawn(function() while v6 do local v9=0;local v10=0;if (v5:FindFirstChild("leaderstats") and v5.leaderstats:FindFirstChild("Cash") and v5.leaderstats.Cash:IsA("NumberValue")) then v9=v5.leaderstats.Cash.Value;end if (v9<=100000000) then pcall(function() v3.Remotes.CrateDestroyed:FireServer(math.huge);end);end if (v5:FindFirstChild("SpawnTier") and v5.SpawnTier:IsA("IntValue")) then v10=v5.SpawnTier.Value;end pcall(function() v3.Remotes.UpgradeSpawnTier:FireServer();end);task.wait(v7);local v11=0;if (v5:FindFirstChild("SpawnTier") and v5.SpawnTier:IsA("IntValue")) then v11=v5.SpawnTier.Value;end if (v11<=v10) then if (v5:FindFirstChild("Rebirths") and v5.Rebirths:IsA("IntValue")) then if (v5.Rebirths.Value>=8) then v6=false;v0:Notify({Title="AutoFarm",Content="Max Rebirths reached! AutoFarm turned off.",Duration=4,Image=4483362458});break;end end pcall(function() v3.Remotes.BuyBrainrot:FireServer(3);end);pcall(function() v3.Remotes.Rebirth:FireServer();end);task.wait(3);end end end);end end});v2:CreateSection("Manually");v2:CreateButton({Name="Inf Money",Callback=function() pcall(function() v3.Remotes.CrateDestroyed:FireServer(math.huge);end);end});v2:CreateButton({Name="Upgrade Spawn Tier",Callback=function() pcall(function() v3.Remotes.UpgradeSpawnTier:FireServer();end);end});v2:CreateButton({Name="Rebirth",Callback=function() pcall(function() v3.Remotes.Rebirth:FireServer();end);end});v2:CreateButton({Name="Buy Brainrot",Callback=function() pcall(function() v3.Remotes.BuyBrainrot:FireServer(3);end);end});
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+ Name = "Brainrot Army",
+ LoadingTitle = "Rayfield Interface",
+ LoadingSubtitle = "by GANTJENK",
+ ConfigurationSaving = { Enabled = false }
+})
+
+local MainTab = Window:CreateTab("Main", 4483362458)
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local plr = Players.LocalPlayer
+
+local autoFarm = false
+local farmDelay = 0.5
+
+MainTab:CreateSection("Automatically")
+MainTab:CreateToggle({
+ Name = "Auto Rebirths",
+ CurrentValue = false,
+ Callback = function(value)
+  autoFarm = value
+  if value then
+   task.spawn(function()
+    while autoFarm do
+     local money = 0
+     local prevTier = 0
+
+     if plr:FindFirstChild("leaderstats") and plr.leaderstats:FindFirstChild("Cash") and plr.leaderstats.Cash:IsA("NumberValue") then
+      money = plr.leaderstats.Cash.Value
+     end
+
+     if money <= 100000000 then
+      pcall(function()
+       ReplicatedStorage.Remotes.CrateDestroyed:FireServer(1000000000000000000000000000)
+      end)
+     end
+
+     if plr:FindFirstChild("SpawnTier") and plr.SpawnTier:IsA("IntValue") then
+      prevTier = plr.SpawnTier.Value
+     end
+
+     pcall(function()
+      ReplicatedStorage.Remotes.UpgradeSpawnTier:FireServer()
+     end)
+     task.wait(farmDelay)
+
+     local newTier = 0
+     if plr:FindFirstChild("SpawnTier") and plr.SpawnTier:IsA("IntValue") then
+      newTier = plr.SpawnTier.Value
+     end
+
+     if newTier <= prevTier then
+      if plr:FindFirstChild("Rebirths") and plr.Rebirths:IsA("IntValue") then
+       if plr.Rebirths.Value >= 8 then
+        autoFarm = false
+        Rayfield:Notify({
+         Title = "AutoFarm",
+         Content = "Max Rebirths reached! AutoFarm turned off.",
+         Duration = 4,
+         Image = 4483362458
+        })
+        break
+       end
+      end
+
+      pcall(function()
+       ReplicatedStorage.Remotes.BuyBrainrot:FireServer(3)
+      end)
+
+      pcall(function()
+       ReplicatedStorage.Remotes.Rebirth:FireServer()
+      end)
+
+      task.wait(3)
+     end
+    end
+   end)
+  end
+ end
+})
+
+MainTab:CreateSection("Manually")
+MainTab:CreateButton({
+ Name = "Inf Money",
+ Callback = function()
+  pcall(function()
+   ReplicatedStorage.Remotes.CrateDestroyed:FireServer(1000000000000000000000000000)
+  end)
+ end
+})
+
+MainTab:CreateButton({
+ Name = "Upgrade Spawn Tier",
+ Callback = function()
+  pcall(function()
+   ReplicatedStorage.Remotes.UpgradeSpawnTier:FireServer()
+  end)
+ end
+})
+
+MainTab:CreateButton({
+ Name = "Rebirth",
+ Callback = function()
+  pcall(function()
+   ReplicatedStorage.Remotes.Rebirth:FireServer()
+  end)
+ end
+})
+
+MainTab:CreateButton({
+ Name = "Buy Brainrot",
+ Callback = function()
+  pcall(function()
+   ReplicatedStorage.Remotes.BuyBrainrot:FireServer(3)
+  end)
+ end
+})
