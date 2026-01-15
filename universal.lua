@@ -49,11 +49,18 @@ UniTab:CreateButton({
  end
 })
 
+UniTab:CreateButton({
+ Name = "DEX/EXPLORER",
+ Callback = function()
+  loadstring(game:HttpGet("https://raw.githubusercontent.com/infyiff/backup/main/dex.lua"))()
+ end
+})
+
 --==SESSION TAB==--
 SessionTab:CreateSection("Information")
 SessionTab:CreateParagraph({
  Title = "Universal Script",
- Content = "This script includes a universal script framework. Some features in MainTab, ToolsTab, and SessionTab may not be fully compatible with this game and could not work as intended."
+ Content = "This script includes a universal script framework. Some features in MainTab and UniTab may not be fully compatible with this game and could not work as intended."
 })
 
 SessionTab:CreateSection("Session Protection")
