@@ -10,7 +10,7 @@ local Window = Rayfield:CreateWindow({
 local MainTab = Window:CreateTab("Main", 4483362458)
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local autoFarm = false
-local farmDelay = 0.5
+local farmDelay = 0.1
 
 MainTab:CreateSection("Automatically")
 MainTab:CreateToggle({
@@ -22,7 +22,7 @@ MainTab:CreateToggle({
    task.spawn(function()
     while autoFarm do
      pcall(function()
-      local info = ReplicatedStorage.Remotes.GetSpawnTierInfo:InvokeServer()
+      local info = ReplicatedStorage.Remotes.GetRebirthInfo:InvokeServer()
       local required = info and info.RequiredCash or 1e180
       ReplicatedStorage.Remotes.CrateDestroyed:FireServer(required)
       ReplicatedStorage.Remotes.Rebirth:FireServer()
@@ -39,7 +39,7 @@ MainTab:CreateButton({
  Name = "Inf Money",
  Callback = function()
   pcall(function()
-   local info = ReplicatedStorage.Remotes.GetSpawnTierInfo:InvokeServer()
+   local info = ReplicatedStorage.Remotes.GetRebirthInfo:InvokeServer()
    local required = info and info.RequiredCash or 1e180
    ReplicatedStorage.Remotes.CrateDestroyed:FireServer(required)
   end)
