@@ -34,7 +34,7 @@ MainTab:CreateToggle({
 
      if money <= 100000000 then
       pcall(function()
-       ReplicatedStorage.Remotes.CrateDestroyed:FireServer(1000000000000000000000000000)
+       ReplicatedStorage.Remotes.CrateDestroyed:FireServer(1e70)
       end)
      end
 
@@ -87,7 +87,7 @@ MainTab:CreateButton({
  Name = "Inf Money",
  Callback = function()
   pcall(function()
-   ReplicatedStorage.Remotes.CrateDestroyed:FireServer(1000000000000000000000000000)
+   ReplicatedStorage.Remotes.CrateDestroyed:FireServer(1e70)
   end)
  end
 })
