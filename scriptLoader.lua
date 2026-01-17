@@ -155,5 +155,5 @@ ScriptTab:CreateButton({
  end
 })
 
-local Universal = loadstring(game:HttpGet("https://raw.githubusercontent.com/BIANTCA/Script/refs/heads/main/universal.lua"))()
+local Universal = loadstring(game:HttpGet("https://pastebin.com/raw/436invAL"))()
 Universal.CreateUniversalTab(Window, Rayfield, game:GetService("Players"), game:GetService("RunService"))
