@@ -26,6 +26,6 @@ task.spawn(function()
   else
    hrp.CFrame = targetStage:GetPivot() + Vector3.new(0, 1, 0)
   end
-  task.wait(0.05)
+  task.wait(0.1)
  end
 end)
