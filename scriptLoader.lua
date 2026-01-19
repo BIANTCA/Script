@@ -1,20 +1,18 @@
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Tumblr = loadstring(game:HttpGet('https://pastebin.com/raw/2BGUWvbd'))()
 local HttpService = game:GetService("HttpService")
 local MarketplaceService = game:GetService("MarketplaceService")
 
+-- Ambil nama game
 local gameInfo
 local ok, info = pcall(function()
  return MarketplaceService:GetProductInfo(game.PlaceId)
- end)
+end)
 gameInfo = (ok and info and info.Name) or "Unknown Game"
 
-local Window = Rayfield:CreateWindow({
- Name = "Auto Script",
- LoadingTitle = "Auto Script",
- LoadingSubtitle = "By Scriptblox",
- ConfigurationSaving = {
-  Enabled = false
- },
+-- GUI
+local Window = Tumblr:Init({
+ Name = "Tumblr Utility Hub",
+ Subtitle = "Modern UI Showcase"
 })
 
 local MainTab = Window:CreateTab("Main", 4483362458)
@@ -24,155 +22,148 @@ local ScriptTab = Window:CreateTab("Script", 4483362458)
 ScriptTab:CreateSection("ScriptBlox Search")
 local currentQuery = gameInfo
 
+-- Input untuk search
 ScriptTab:CreateInput({
  Name = "Search Script: " .. gameInfo,
  PlaceholderText = "Game name",
  RemoveTextAfterFocusLost = false,
  CurrentValue = currentQuery,
  Callback = function(value)
- currentQuery = value
- Rayfield:Notify({
-  Title = "Search Updated",
-  Content = "Search query set to: " .. tostring(value),
-  Duration = 2
- })
+  currentQuery = value
+  Tumblr:Notify({
+   Title = "Search Updated",
+   Content = "Search query set to: " .. tostring(value),
+   Duration = 2
+  })
  end
 })
 
+-- Fungsi ambil data dari ScriptBlox (auto multi-page)
 local function fetchScripts(query)
-local url = "https://scriptblox.com/api/script/search?q=" .. HttpService:UrlEncode(query)
-local success, result = pcall(function()
- return game:HttpGet(url)
- end)
+ local scripts = {}
+ local page = 1
+ local hasNext = true
 
-if not success then
-Rayfield:Notify({
- Title = "Error",
- Content = "Failed to fetch data from ScriptBlox.",
- Duration = 4
-})
-return nil
+ while hasNext do
+  local url = ("https://scriptblox.com/api/script/search?q=%s&page=%d"):format(HttpService:UrlEncode(query), page)
+  local success, result = pcall(function()
+   return game:HttpGet(url)
+  end)
+  if not success then break end
+
+  local ok, data = pcall(function()
+   return HttpService:JSONDecode(result)
+  end)
+  if not ok or not data.result or not data.result.scripts then break end
+
+  -- Filter hanya script tanpa key system
+  for _, s in ipairs(data.result.scripts) do
+   if not s.key then
+    table.insert(scripts, s)
+   end
+  end
+
+  hasNext = data.result.hasNextPage or false
+  page += 1
+  task.wait(0.1)
+ end
+
+ return scripts
 end
 
-local ok, data = pcall(function()
- return HttpService:JSONDecode(result)
- end)
+-- Format data jadi teks rapi
+local function formatScriptInfo(s)
+ local lines = {}
 
-if not ok or not data.result or not data.result.scripts then
-Rayfield:Notify({
- Title = "Error",
- Content = "Invalid JSON format.",
- Duration = 4
-})
-return nil
-end
+ -- Status
+ local patched = s.isPatched and "⚠️ Patched (Not Working)" or "✅ Working"
+ local typeText = s.scriptType == "Paid" and "💰 Paid Script" or "🆓 Free Script"
 
-return data.result.scripts
-end
+ -- Key system
+ local keyText = s.key and "🔒 Requires Key" or "🔓 Keyless"
 
-local function tableToText(tbl)
-local content = ""
-for k, v in pairs(tbl) do
-if k ~= "script" and k ~= "slug" and k ~= "matched" and k ~= "game" and k ~= "lastBump" and k ~= "image" and k ~= "_id" and k ~= "createdAt" then
-if typeof(v) == "table" then
-content = content .. k .. ":\n"
-for subk, subv in pairs(v) do
-content = content .. "  " .. tostring(subk) .. ": " .. tostring(subv) .. "\n"
-end
-else
- content = content .. k .. ": " .. tostring(v) .. "\n"
-end
-end
-end
-return content
+ -- Universal
+ local universalText = s.isUniversal and "🌐 Universal" or "🎯 Game-Specific"
+
+ -- Statistik
+ local stats = string.format("👍 %d   👎 %d   👁️ %d", s.likeCount or 0, s.dislikeCount or 0, s.views or 0)
+
+ table.insert(lines, typeText)
+ table.insert(lines, patched)
+ table.insert(lines, keyText)
+ table.insert(lines, universalText)
+ table.insert(lines, "")
+ table.insert(lines, stats)
+
+ return table.concat(lines, "\n")
 end
 
 local function showScripts(scripts)
-for i, s in ipairs(scripts) do
-local gameName = (s.game and s.game.name) or "Unknown Game"
-ScriptTab:CreateSection(gameName)
+ for i, s in ipairs(scripts) do
+  local gameName = (s.game and s.game.name) or "Unknown Game"
+  ScriptTab:CreateSection(gameName)
 
-local title = "[" .. i .. "] " .. (s.title or "Untitled")
-local paragraphText = tableToText(s)
+  local title = "[" .. i .. "] " .. (s.title or "Untitled")
 
-ScriptTab:CreateParagraph({
- Title = title,
- Content = paragraphText
-})
+  ScriptTab:CreateParagraph({
+   Title = title,
+   Content = formatScriptInfo(s)
+  })
 
-local runScript = false
+  ScriptTab:CreateButton({
+   Name = "Run Script",
+   Callback = function()
+    local code = s.script
+    if code and code ~= "" then
+     local ok, err = pcall(function()
+      loadstring(code)()
+     end)
 
-ScriptTab:CreateButton({
- Name = "Run Script",
- Info = "Start",
- Interact = "Start",
- Callback = function()
- local code = s.script
- if code and code ~= "" then
- local hasKey = s.key == true
-
- if hasKey then
- if not runScript then
- runScript = true
- Rayfield:Notify({
-  Title = "Double Click",
-  Content = "Double click for key scripts",
-  Duration = 1
- })
-
- task.delay(0.5, function()
-  runScript = false
-  end)
- return
+     if ok then
+      Tumblr:Notify({
+       Title = "Success",
+       Content = "Script executed successfully!",
+       Duration = 3
+      })
+     else
+      Tumblr:Notify({
+       Title = "Error",
+       Content = tostring(err),
+       Duration = 4
+      })
+     end
+    else
+     Tumblr:Notify({
+      Title = "Empty",
+      Content = "This script has no runnable code.",
+      Duration = 3
+     })
+    end
+   end
+  })
  end
- end
-
- local ok, err = pcall(function()
-  loadstring(code)()
-  end)
-
- if ok then
- Rayfield:Notify({
-  Title = "Success",
-  Content = "Script executed successfully!",
-  Duration = 3
- })
- else
-  Rayfield:Notify({
-  Title = "Error",
-  Content = "Failed to execute script: " .. tostring(err),
-  Duration = 4
- })
- end
-
- runScript = false
- else
-  Rayfield:Notify({
-  Title = "Empty",
-  Content = "This script has no runnable code.",
-  Duration = 3
- })
- end
- end
-})
-end
 end
 
 ScriptTab:CreateButton({
  Name = "Load Scripts",
  Callback = function()
- local scripts = fetchScripts(currentQuery)
- if scripts then
- Rayfield:Notify({
-  Title = "Updated",
-  Content = "ScriptBlox data refreshed for: " .. tostring(currentQuery),
-  Duration = 3
- })
- showScripts(scripts)
- end
+  local scripts = fetchScripts(currentQuery)
+  if scripts and #scripts > 0 then
+   Tumblr:Notify({
+    Title = "Updated",
+    Content = "Loaded " .. tostring(#scripts) .. " scripts (no key system).",
+    Duration = 3
+   })
+   showScripts(scripts)
+  else
+   Tumblr:Notify({
+    Title = "No Scripts",
+    Content = "No public scripts found without key system.",
+    Duration = 3
+   })
+  end
  end
 })
 
-
 local Universal = loadstring(game:HttpGet("https://pastebin.com/raw/436invAL"))()
-Universal.CreateUniversalTab(Window, Rayfield, game:GetService("Players"), game:GetService("RunService"))
+Universal.CreateUniversalTab(Window, Tumblr, game:GetService("Players"), game:GetService("RunService"))
