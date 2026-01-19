@@ -9,8 +9,8 @@ end)
 gameInfo = (ok and info and info.Name) or "Unknown Game"
 
 local Window = Tumblr:Init({
- Name = "Tumblr Utility Hub",
- Subtitle = "Modern UI Showcase"
+ Name = "Tumblr Hub",
+ Subtitle = "Script loader"
 })
 
 local MainTab = Window:CreateTab("Main", 4483362458)
