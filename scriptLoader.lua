@@ -9,7 +9,7 @@ local ok, info = pcall(function()
 end)
 gameInfo = (ok and info and info.Name) or "Unknown Game"
 
--- local Window = Rayfield:CreateWindow({ Name = "Auto Script",LoadingTitle = "Auto Script",LoadingSubtitle = "By Scriptblox",ConfigurationSaving = {Enabled = false},}) -- use this for Rayfield GUI
+-- local Window = Tumblr:CreateWindow({ Name = "Auto Script",LoadingTitle = "Auto Script",LoadingSubtitle = "By Scriptblox",ConfigurationSaving = {Enabled = false},}) -- use this for Rayfield GUI
 
 local Window = Tumblr:Init({
  Name = "Tumblr Hub",
