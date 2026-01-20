@@ -24,7 +24,7 @@ ScriptTab:CreateSection("ScriptBlox Search")
 local currentQuery = gameInfo
 
 ScriptTab:CreateInput({
- Name = "Search Script: " .. gameInfo,
+ Name = "Search Script:",
  PlaceholderText = "Game name",
  RemoveTextAfterFocusLost = false,
  CurrentValue = currentQuery,
