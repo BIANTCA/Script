@@ -1,5 +1,4 @@
 local Tumblr = loadstring(game:HttpGet('https://pastebin.com/raw/2BGUWvbd'))()
---local Tumblr = loadstring(game:HttpGet('https://sirius.menu/rayfield'))() -- use this for rayfield GUI
 local HttpService = game:GetService("HttpService")
 local MarketplaceService = game:GetService("MarketplaceService")
 
@@ -9,12 +8,9 @@ local ok, info = pcall(function()
  end)
 gameInfo = (ok and info and info.Name) or "Unknown Game"
 
--- local Window = Tumblr:CreateWindow({ Name = "Auto Script",LoadingTitle = "Auto Script",LoadingSubtitle = "By Scriptblox",ConfigurationSaving = {Enabled = false},}) -- use this for Rayfield GUI
-
 local Window = Tumblr:Init({
  Name = "Tumblr Hub",
  Subtitle = "Script loader",
-
  FolderName = "TumblrConfigs",
  FileName = tostring(MarketplaceService:GetProductInfo(game.GameId)) .. ".json"
 })
