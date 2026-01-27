@@ -9,7 +9,7 @@ local ok, info = pcall(function()
 gameInfo = (ok and info and info.Name) or "Unknown Game"
 
 local Window = Tumblr:Init({
- Name = "Tumblr Hub",
+ Name = "Tumblr Hub V2",
  Subtitle = "Script loader",
  FolderName = "TumblrConfigs",
  FileName = tostring(game.GameId)..".json"
