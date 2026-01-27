@@ -12,7 +12,7 @@ local Window = Tumblr:Init({
  Name = "Tumblr Hub",
  Subtitle = "Script loader",
  FolderName = "TumblrConfigs",
- FileName = tostring(MarketplaceService:GetProductInfo(game.GameId)) .. ".json"
+ FileName = tostring(game.GameId)..".json"
 })
 
 local MainTab = Window:CreateTab("Main", 4483362458)
