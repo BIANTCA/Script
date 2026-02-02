@@ -155,18 +155,18 @@ button = ScriptTab:CreateButton({
  if #spawnedGuis == 0 then
  Tumblr:Notify({
   Title = "Notice",
-  Content = "Script ran but no CoreGui detected.",
+  Content = "Script ran but can't detected.",
   Duration = 3
  })
  return
  end
 
  running = true
- button:Set("Name", "Delete GUI")
+ button:Set("Name", "Delete Script UI")
 
  Tumblr:Notify({
   Title = "Success",
-  Content = "GUI detected & tracked.",
+  Content = "Script detected & tracked.",
   Duration = 3
  })
  else
@@ -182,7 +182,7 @@ button = ScriptTab:CreateButton({
 
  Tumblr:Notify({
   Title = "Removed",
-  Content = "GUI removed from CoreGui.",
+  Content = "Script removed.",
   Duration = 3
  })
  end
