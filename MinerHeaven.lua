@@ -1,1 +1,140 @@
-local v0=loadstring(game:HttpGet("https://sirius.menu/rayfield"))();local v1=v0:CreateWindow({Name="Teleport GUI",LoadingTitle="Rayfield Interface",LoadingSubtitle="by GANTJENK",ConfigurationSaving={Enabled=false}});local v2=game:GetService("Players");local v3=game:GetService("RunService");local v4=game:GetService("ReplicatedStorage");local v5=game:GetService("Workspace");local v6=game:GetService("TeleportService");local v7=game:GetService("HttpService");local v8=v2.LocalPlayer;local v9=v8.Character or v8.CharacterAdded:Wait() ;local v10=v9:WaitForChild("HumanoidRootPart");local v11=v1:CreateTab("Main",4483363724 -(97 + 1169) );_G.MainTab=v11;local v12=v5:WaitForChild("Boxes");local v13=false;local v14=1065.2 -(68 + 997) ;local v15=1270.1 -(226 + 1044) ;v11:CreateSection("Main Menu");v11:CreateToggle({Name="Auto Teleport Boxes",CurrentValue=false,Callback=function(v20) v13=v20;if v20 then local v25=0 -0 ;local v26;local v27;local v28;while true do if (v25==(118 -(32 + 85))) then v28=0 + 0 ;task.spawn(function() local v34=0 + 0 ;while true do if (v34==0) then while v13 do local v37={};for v39,v40 in ipairs(v12:GetChildren()) do if v40:IsA("MeshPart") then table.insert(v37,v40);end end if ( #v37==(957 -(892 + 65))) then v10.CFrame=v26;task.wait(v15);continue;end local v38=v37[math.random(2 -1 , #v37)];if (v27==v38) then v28+=1 else v28=0 -0 ;v27=v38;end if (v28>=(18 -8)) then local v42=350 -(87 + 263) ;while true do if (v42==(180 -(67 + 113))) then v10.CFrame=v26;v28=0;v42=1;end if (v42==(1 + 0)) then task.wait(v15);break;end end else v10.CFrame=v38.CFrame + Vector3.new(0 -0 ,3 + 0 ,0 -0 ) ;task.wait(v14);end end v10.CFrame=v26;break;end end end);break;end if (v25==(952 -(802 + 150))) then v26=v10.CFrame;v27=nil;v25=1;end end end end});local v16=v1:CreateTab("Teleport",4483362458);local v17=v5:WaitForChild("Map");local function v18(v21) v16:CreateButton({Name="TP to "   .. v21.Name ,Callback=function() pcall(function() local v29=0 -0 ;local v30;while true do if ((0 -0)==v29) then v30=v21.PrimaryPart or v21:FindFirstChildWhichIsA("BasePart") ;if v30 then v10.CFrame=v30.CFrame + Vector3.new(0,3,0 + 0 ) ;end break;end end end);end});end for v22,v23 in ipairs(v17:GetChildren()) do if v23:IsA("Model") then v18(v23);end end v16:CreateButton({Name="🔄 Refresh Teleport List",Callback=function() local v24=997 -(915 + 82) ;while true do if (v24==(0 -0)) then v16:CreateSection("Updated Models");for v31,v32 in ipairs(v17:GetChildren()) do if v32:IsA("Model") then v18(v32);end end break;end end end});local v19=loadstring(game:HttpGet("https://raw.githubusercontent.com/BIANTCA/Script/refs/heads/main/universal.lua"))();v19.CreateUniversalTab(v1,v0,v2,v3);
+-- Teleport GUI (versi bersih / deobfuscated)
+-- Perubahan dari script asli:
+--   * Auto Teleport Boxes: kunjungi SEMUA isi folder Boxes (Part/MeshPart/Model)
+--   * Tombol "TP to Market Internal" di bawah toggle
+
+local Rayfield = loadstring(game:HttpGet("https://pastebin.com/raw/ECe9auLu"))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Teleport GUI",
+    LoadingTitle = "Rayfield Interface",
+    LoadingSubtitle = "by GANTJENK",
+    ConfigurationSaving = { Enabled = false }
+})
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+
+-- Player
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart")
+
+-- Main tab
+local MainTab = Window:CreateTab("Main", 4483362458)
+_G.MainTab = MainTab
+
+local Boxes = Workspace:WaitForChild("Boxes")
+local autoBoxes = false
+local boxDelay = 0.2   -- jeda tiap box
+local idleDelay = 0.1  -- jeda saat folder kosong
+
+MainTab:CreateSection("Main Menu")
+
+-- Ambil part tujuan dari Part / MeshPart / Model
+local function getTargetPart(obj)
+    if obj:IsA("BasePart") then
+        return obj
+    elseif obj:IsA("Model") then
+        return obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart", true)
+    end
+    return nil
+end
+
+MainTab:CreateToggle({
+    Name = "Auto Teleport Boxes",
+    CurrentValue = false,
+    Callback = function(enabled)
+        autoBoxes = enabled
+        if not enabled then return end
+
+        local originalCFrame = hrp.CFrame
+
+        task.spawn(function()
+            while autoBoxes do
+                local visited = false
+
+                for _, box in ipairs(Boxes:GetChildren()) do
+                    if not autoBoxes then break end
+                    local part = box.Parent and getTargetPart(box)
+                    if part then
+                        visited = true
+                        hrp.CFrame = part.CFrame + Vector3.new(0, 3, 0)
+                        task.wait(boxDelay)
+                    end
+                end
+
+                if not visited then
+                    hrp.CFrame = originalCFrame
+                    task.wait(idleDelay)
+                end
+            end
+
+            hrp.CFrame = originalCFrame
+        end)
+    end
+})
+
+MainTab:CreateButton({
+    Name = "TP to Market Internal",
+    Callback = function()
+        local market = Workspace:FindFirstChild("Market")
+        local internal = market and market:FindFirstChild("Internal")
+        local part = internal and getTargetPart(internal)
+
+        if part then
+            hrp.CFrame = part.CFrame + Vector3.new(0, 3, 0)
+        else
+            Rayfield:Notify({
+                Title = "Teleport",
+                Content = "Workspace.Map.Market.Internal tidak ditemukan",
+                Duration = 3
+            })
+        end
+    end
+})
+
+-- Teleport tab
+local TeleportTab = Window:CreateTab("Teleport", 4483362458)
+local Map = Workspace:WaitForChild("Map")
+
+local function createTeleportButton(model)
+    TeleportTab:CreateButton({
+        Name = "TP to " .. model.Name,
+        Callback = function()
+            pcall(function()
+                local part = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+                if part then
+                    hrp.CFrame = part.CFrame + Vector3.new(0, 3, 0)
+                end
+            end)
+        end
+    })
+end
+
+for _, child in ipairs(Map:GetChildren()) do
+    if child:IsA("Model") then
+        createTeleportButton(child)
+    end
+end
+
+TeleportTab:CreateButton({
+    Name = "🔄 Refresh Teleport List",
+    Callback = function()
+        TeleportTab:CreateSection("Updated Models")
+        for _, child in ipairs(Map:GetChildren()) do
+            if child:IsA("Model") then
+                createTeleportButton(child)
+            end
+        end
+    end
+})
+
+-- Universal tab (script eksternal)
+local Universal = loadstring(game:HttpGet("https://raw.githubusercontent.com/BIANTCA/Script/refs/heads/main/universal.lua"))()
+Universal.CreateUniversalTab(Window, Rayfield, Players, RunService)
