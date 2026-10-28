@@ -1,15 +1,10 @@
--- Teleport GUI (versi bersih / deobfuscated)
--- Perubahan dari script asli:
---   * Auto Teleport Boxes: kunjungi SEMUA isi folder Boxes (Part/MeshPart/Model)
---   * Tombol "TP to Market Internal" di bawah toggle
+local Tumblr = loadstring(game:HttpGet("https://pastebin.com/raw/ECe9auLu"))()
 
-local Rayfield = loadstring(game:HttpGet("https://pastebin.com/raw/ECe9auLu"))()
-
-local Window = Rayfield:CreateWindow({
+local Window = Tumblr:Init({
     Name = "Teleport GUI",
-    LoadingTitle = "Rayfield Interface",
-    LoadingSubtitle = "by GANTJENK",
-    ConfigurationSaving = { Enabled = false }
+    Subtitle = "by GANTJENK",
+    FolderName = "TumblrConfigs",
+    FileName = tostring(game.GameId) .. ".json"
 })
 
 -- Services
@@ -81,7 +76,8 @@ MainTab:CreateToggle({
 })
 
 MainTab:CreateButton({
-    Name = "TP to Market Internal",
+    Name = "TP to Maskman",
+    Interact = "Teleport",
     Callback = function()
         local market = Workspace:FindFirstChild("Market")
         local internal = market and market:FindFirstChild("Internal")
@@ -90,12 +86,55 @@ MainTab:CreateButton({
         if part then
             hrp.CFrame = part.CFrame + Vector3.new(0, 3, 0)
         else
-            Rayfield:Notify({
+            Tumblr:Notify({
                 Title = "Teleport",
-                Content = "Workspace.Map.Market.Internal tidak ditemukan",
+                Content = "Workspace.Market.Internal tidak ditemukan",
                 Duration = 3
             })
         end
+    end
+})
+
+MainTab:CreateButton({
+    Name = "TP to Base",
+    Interact = "Teleport",
+    Callback = function()
+        local tycoons = Workspace:FindFirstChild("Tycoons")
+        if not tycoons then
+            Tumblr:Notify({
+                Title = "Teleport",
+                Content = "Workspace.Tycoons tidak ditemukan",
+                Duration = 3
+            })
+            return
+        end
+
+        local myName = player.Name:lower()
+
+        for _, factory in ipairs(tycoons:GetChildren()) do
+            local owner = factory:FindFirstChild("Owner")
+            if factory:IsA("Model") and owner and owner:IsA("StringValue")
+                and owner.Value:lower() == myName then
+
+                local pos = factory.PrimaryPart and factory.PrimaryPart.Position
+                    or factory:GetPivot().Position
+
+                hrp.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
+
+                Tumblr:Notify({
+                    Title = "Teleport",
+                    Content = "Teleport to base",
+                    Duration = 2
+                })
+                return
+            end
+        end
+
+        Tumblr:Notify({
+            Title = "Teleport",
+            Content = "Base kamu tidak ditemukan (belum punya Factory?)",
+            Duration = 3
+        })
     end
 })
 
@@ -106,6 +145,7 @@ local Map = Workspace:WaitForChild("Map")
 local function createTeleportButton(model)
     TeleportTab:CreateButton({
         Name = "TP to " .. model.Name,
+        Interact = "Teleport",
         Callback = function()
             pcall(function()
                 local part = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
@@ -125,6 +165,7 @@ end
 
 TeleportTab:CreateButton({
     Name = "🔄 Refresh Teleport List",
+    Interact = "Refresh",
     Callback = function()
         TeleportTab:CreateSection("Updated Models")
         for _, child in ipairs(Map:GetChildren()) do
@@ -136,5 +177,5 @@ TeleportTab:CreateButton({
 })
 
 -- Universal tab (script eksternal)
-local Universal = loadstring(game:HttpGet("https://raw.githubusercontent.com/BIANTCA/Script/refs/heads/main/universal.lua"))()
-Universal.CreateUniversalTab(Window, Rayfield, Players, RunService)
+local Universal = loadstring(game:HttpGet("https://pastebin.com/raw/436invAL"))()
+Universal.CreateUniversalTab(Window, Tumblr, Players, RunService)
