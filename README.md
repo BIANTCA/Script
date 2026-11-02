@@ -2,7 +2,7 @@
 
 # 🧠 Universal.lua — Roblox Universal Utility Module
 
-Universal.lua is a modular Roblox Lua script that adds powerful character, movement, and visual utilities into any custom Rayfield GUI window.
+Universal.lua is a modular Roblox Lua script that adds powerful character, movement, and visual utilities into any custom Bulb GUI window.
 It’s designed to be dropped into any exploit script as a plug-and-play extension that automatically builds full-featured Main and Tools tabs.
 
 
@@ -63,7 +63,7 @@ Anti Kick / Ban – Intercept Kick and Ban remote calls.
 
 Rejoin Server – Instantly teleport back into the same game.
 
-Close GUI – Cleanly remove the entire Rayfield interface.
+Close GUI – Cleanly remove the entire Bulb interface.
 
 
 
@@ -71,16 +71,16 @@ Close GUI – Cleanly remove the entire Rayfield interface.
 
 ## 🧩 Example Usage
 
-To load the Universal module inside your own Rayfield GUI script:
+To load the Universal module inside your own Bulb GUI script:
 ```
 local Universal = loadstring(game:HttpGet("https://raw.githubusercontent.com/BIANTCA/Script/refs/heads/main/universal.lua"))()
-Universal.CreateUniversalTab(Window, Rayfield, Players, RunService)
+Universal.CreateUniversalTab(Window, Bulb, Players, RunService)
 ```
 Parameters:
 
-Window → your existing Rayfield window instance
+Window → your existing Bulb window instance
 
-Rayfield → the Rayfield library reference
+Bulb → the Bulb library reference
 
 Players → game:GetService("Players")
 
@@ -99,22 +99,28 @@ Tools tab — Miscellaneous tools and anti-systems
 
 ## 🧩 Integration Example
 
-If your GUI already defines a Rayfield window:
+If your GUI already defines a Bulb window:
 ```
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Tumblr = loadstring(game:HttpGet("https://pastebin.com/raw/2BGUWvbd"))()
 
-local Window = Rayfield:CreateWindow({
+local Window = Tumblr:Init({
  Name = "My Custom GUI",
- LoadingTitle = "Rayfield Interface",
- LoadingSubtitle = "Powered by Universal.lua"
+ Subtitle = "Powered by Universal.lua",
+ FolderName = "TumblrConfigs",
+ FileName = tostring(game.GameId) .. ".json"
 })
 
 local MainTab = Window:CreateTab("Main", 4483362458)
-_G.MainTab = MainTab <--- to put into your mainTab
+_G.MainTab = MainTab
 
--- Import Universal
 local Universal = loadstring(game:HttpGet("https://raw.githubusercontent.com/BIANTCA/Script/refs/heads/main/universal.lua"))()
-Universal.CreateUniversalTab(Window, Rayfield, game:GetService("Players"), game:GetService("RunService"))
+Universal.CreateUniversalTab(
+ Window,
+ Tumblr,
+ game:GetService("Players"),
+ game:GetService("RunService")
+)
+
 ```
 
 ---
@@ -125,7 +131,7 @@ All toggles, sliders, and buttons are self-contained and automatically connect t
 
 Safe to integrate with any other GUI or exploit script.
 
-Works with both desktop and mobile executors that support Rayfield.
+Works with both desktop and mobile executors that support Bulb.
 
 
 
