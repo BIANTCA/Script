@@ -232,6 +232,36 @@ local function boostOre()
     return true
 end
 
+local function moveOreToLava()
+    local factory = getMyFactory()
+    if not factory then
+        return false, "Factory milikmu tidak ditemukan"
+    end
+
+    local dropped = Workspace:FindFirstChild("DroppedParts")
+    local droppedFolder = dropped and dropped:FindFirstChild(factory.Name)
+    if not droppedFolder then
+        return false, "Workspace.DroppedParts." .. factory.Name .. " tidak ditemukan"
+    end
+
+    local lava = findLava(factory)
+    if not lava then
+        return false, "Lava tidak ditemukan di " .. factory.Name
+    end
+
+    local target = lava.CFrame * DROP_OFFSET
+
+    for _, ore in ipairs(droppedFolder:GetChildren()) do
+        if ore:IsA("BasePart") then
+            ore.CFrame = target
+        elseif ore:IsA("Model") then
+            ore:PivotTo(target)
+        end
+    end
+
+    return true
+end
+
 local boostButton
 
 boostButton = MainTab:CreateButton({
@@ -270,6 +300,36 @@ boostButton = MainTab:CreateButton({
     end
 })
 
--- Universal tab (script eksternal)
+MainTab:CreateButton({
+    Name = "TP Ore to Lava",
+    Interact = "Teleport",
+    Callback = function()
+        task.spawn(function()
+            local ok, success, message = pcall(moveOreToLava)
+
+            if not ok then
+                warn("[TP Ore] Error:", success)
+                Tumblr:Notify({
+                    Title = "TP Ore to Lava",
+                    Content = "Terjadi kesalahan: " .. tostring(success),
+                    Duration = 3
+                })
+            elseif not success then
+                Tumblr:Notify({
+                    Title = "TP Ore to Lava",
+                    Content = message,
+                    Duration = 3
+                })
+            else
+                Tumblr:Notify({
+                    Title = "TP Ore to Lava",
+                    Content = "Ore berhasil dipindahkan ke Lava!",
+                    Duration = 2
+                })
+            end
+        end)
+    end
+})
+
 local Universal = loadstring(game:HttpGet("https://pastebin.com/raw/436invAL"))()
 Universal.CreateUniversalTab(Window, Tumblr, Players, RunService)
