@@ -305,44 +305,6 @@ boostButton = MainTab:CreateButton({
     end
 })
 
--- Teleport tab
-local TeleportTab = Window:CreateTab("Teleport", 4483362458)
-local Map = Workspace:WaitForChild("Map")
-
-local function createTeleportButton(model)
-    TeleportTab:CreateButton({
-        Name = "TP to " .. model.Name,
-        Interact = "Teleport",
-        Callback = function()
-            pcall(function()
-                local part = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
-                if part then
-                    hrp.CFrame = part.CFrame + Vector3.new(0, 3, 0)
-                end
-            end)
-        end
-    })
-end
-
-for _, child in ipairs(Map:GetChildren()) do
-    if child:IsA("Model") then
-        createTeleportButton(child)
-    end
-end
-
-TeleportTab:CreateButton({
-    Name = "🔄 Refresh Teleport List",
-    Interact = "Refresh",
-    Callback = function()
-        TeleportTab:CreateSection("Updated Models")
-        for _, child in ipairs(Map:GetChildren()) do
-            if child:IsA("Model") then
-                createTeleportButton(child)
-            end
-        end
-    end
-})
-
 -- Universal tab (script eksternal)
 local Universal = loadstring(game:HttpGet("https://pastebin.com/raw/436invAL"))()
 Universal.CreateUniversalTab(Window, Tumblr, Players, RunService)
