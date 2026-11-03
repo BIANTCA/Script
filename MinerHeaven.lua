@@ -140,7 +140,7 @@ MainTab:CreateButton({
 
 -- Boost Ore
 local CELL_NAME = "Anguished Guardian of the Gate" -- nama cell kamu (jika tidak ketemu, cari Lava otomatis)
-local BOOST_INTERVAL = 5                           -- jeda tiap pengulangan (detik)
+local BOOST_INTERVAL = 10                           -- jeda tiap pengulangan (detik)
 local BEAM_GROW = Vector3.new(100, 100, 100)       -- tambahan ukuran part "Upgrade"
 local DROP_OFFSET = CFrame.new(0, 10, 0)           -- posisi ore di atas Lava
 
