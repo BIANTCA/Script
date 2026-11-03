@@ -7,7 +7,6 @@ local Window = Tumblr:Init({
     FileName = tostring(game.GameId) .. ".json"
 })
 
--- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,23 +14,20 @@ local Workspace = game:GetService("Workspace")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
 
--- Player
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local hrp = character:WaitForChild("HumanoidRootPart")
 
--- Main tab
 local MainTab = Window:CreateTab("Main", 4483362458)
 _G.MainTab = MainTab
 
 local Boxes = Workspace:WaitForChild("Boxes")
 local autoBoxes = false
-local boxDelay = 0.2   -- jeda tiap box
-local idleDelay = 0.1  -- jeda saat folder kosong
+local boxDelay = 0.2
+local idleDelay = 0.1
 
 MainTab:CreateSection("Main Menu")
 
--- Ambil part tujuan dari Part / MeshPart / Model
 local function getTargetPart(obj)
     if obj:IsA("BasePart") then
         return obj
@@ -138,15 +134,12 @@ MainTab:CreateButton({
     end
 })
 
--- Boost Ore
-local CELL_NAME = "Anguished Guardian of the Gate" -- nama cell kamu (jika tidak ketemu, cari Lava otomatis)
-local BOOST_INTERVAL = 10                           -- jeda tiap pengulangan (detik)
-local BEAM_GROW = Vector3.new(100, 100, 100)       -- tambahan ukuran part "Upgrade"
-local DROP_OFFSET = CFrame.new(0, 10, 0)           -- posisi ore di atas Lava
+local CELL_NAME = "Anguished Guardian of the Gate"
+local BEAM_GROW = Vector3.new(100, 100, 100)
+local DROP_OFFSET = CFrame.new(0, 10, 0)
 
 local enlargedBeams = setmetatable({}, { __mode = "k" })
 
--- Cari Factory milik user (Workspace.Tycoons.FactoryX dengan Owner = username)
 local function getMyFactory()
     local tycoons = Workspace:FindFirstChild("Tycoons")
     if not tycoons then return nil end
@@ -164,7 +157,6 @@ local function getMyFactory()
     return nil
 end
 
--- Perbesar part "Upgrade" (hanya sekali per part). Return: jumlah part yang baru diperbesar
 local function enlargeBeams(factory)
     local changed = 0
 
@@ -206,7 +198,6 @@ local function findLava(factory)
     return nil
 end
 
--- Satu putaran boost. Return: true / false, pesan error
 local function boostOre()
     local factory = getMyFactory()
     if not factory then
@@ -241,66 +232,40 @@ local function boostOre()
     return true
 end
 
-local boostRunning = false
-local boostSession = 0
 local boostButton
 
 boostButton = MainTab:CreateButton({
     Name = "Boost Ore",
-    Interact = "Start",
+    Interact = "Boost",
     Callback = function()
-        boostRunning = not boostRunning
-        boostSession += 1
-
-        if not boostRunning then
-            boostButton:Set("Interact", "Start")
-            Tumblr:Notify({
-                Title = "Boost Ore",
-                Content = "Stopped",
-                Duration = 2
-            })
-            return
-        end
-
-        local factory = getMyFactory()
-        if not factory then
-            boostRunning = false
-            Tumblr:Notify({
-                Title = "Boost Ore",
-                Content = "Factory milikmu tidak ditemukan",
-                Duration = 3
-            })
-            return
-        end
-
-        boostButton:Set("Interact", "Stop")
-        Tumblr:Notify({
-            Title = "Boost Ore",
-            Content = "Running on " .. factory.Name,
-            Duration = 2
-        })
-
-        local mySession = boostSession
+        boostButton:Set("Interact", "Processing...")
 
         task.spawn(function()
-            while boostRunning and mySession == boostSession do
-                local ok, success, message = pcall(boostOre)
+            local ok, success, message = pcall(boostOre)
 
-                if not ok then
-                    warn("[Boost Ore]", success)
-                elseif not success then
-                    boostRunning = false
-                    boostButton:Set("Interact", "Start")
-                    Tumblr:Notify({
-                        Title = "Boost Ore",
-                        Content = message,
-                        Duration = 3
-                    })
-                    return
-                end
-
-                task.wait(BOOST_INTERVAL)
+            if not ok then
+                warn("[Boost Ore] Error:", success)
+                Tumblr:Notify({
+                    Title = "Boost Ore",
+                    Content = "Terjadi kesalahan: " .. tostring(success),
+                    Duration = 3
+                })
+            elseif not success then
+                Tumblr:Notify({
+                    Title = "Boost Ore",
+                    Content = message,
+                    Duration = 3
+                })
+            else
+                Tumblr:Notify({
+                    Title = "Boost Ore",
+                    Content = "Berhasil mengumpulkan ore!",
+                    Duration = 2
+                })
             end
+
+            task.wait(1)
+            boostButton:Set("Interact", "Boost")
         end)
     end
 })
