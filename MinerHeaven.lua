@@ -103,6 +103,22 @@ MainTab:CreateButton({
 })
 
 MainTab:CreateButton({
+    Name = "TP to Wizard Dude",
+    Interact = "Teleport",
+    Callback = function()
+        local map = Workspace:FindFirstChild("Map")
+        local wizard = map and map:FindFirstChild("WizardDude")
+        local part = wizard and getTargetPart(wizard)
+
+        if part then
+            hrp.CFrame = part.CFrame + Vector3.new(0, 3, 0)
+        else
+            notify("Teleport", "Workspace.Map.WizardDude tidak ditemukan", 3)
+        end
+    end
+})
+
+MainTab:CreateButton({
     Name = "TP to Base",
     Interact = "Teleport",
     Callback = function()
@@ -231,6 +247,7 @@ local function boostOre()
     end
 
     executeOreMove(factory, droppedFolder, lava, DROP_OFFSET)
+    task.wait(1)
     return true
 end
 
@@ -500,25 +517,6 @@ local function canAffordRebirth(moneyLib)
     return true
 end
 
-local function waitMoneyChanged()
-    local money = getMoneyValue()
-    if money then
-        money.Changed:Wait()
-    else
-        task.wait()
-    end
-end
-
-local function waitUntilAffordable(moneyLib, alive)
-    while alive() do
-        if canAffordRebirth(moneyLib) then
-            return true
-        end
-        waitMoneyChanged()
-    end
-    return false
-end
-
 local function waitUntil(condition, alive)
     while alive() do
         if condition() then
@@ -555,6 +553,20 @@ local function rebirthIsolated(net, alive)
     end
 
     return false
+end
+
+local function teleportToBase()
+    local factory = getMyFactory()
+    if not factory then
+        return false
+    end
+
+    local root = (player.Character and player.Character:FindFirstChild("HumanoidRootPart")) or hrp
+    local pos = factory.PrimaryPart and factory.PrimaryPart.Position
+        or factory:GetPivot().Position
+
+    root.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
+    return true
 end
 
 local function hasLava()
@@ -666,17 +678,38 @@ autoFarmToggle = MainTab:CreateToggle({
                                 return
                             end
 
-                            if waitUntilAffordable(moneyLib, alive) then
+                            local affordable = canAffordRebirth(moneyLib)
+
+                            if affordable then
                                 rebirthed = rebirthIsolated(net, alive)
 
                                 if not alive() then return end
+                            end
 
-                                if rebirthed then
-                                    lastMessage = nil
-                                    notify("Auto Farm", "Rebirth Success", 2)
+                            if rebirthed then
+                                lastMessage = nil
+                                notify("Auto Farm", "Rebirth Success", 2)
+                            else
+                                -- Rebirth gagal: notifikasi (ke base hanya jika bukan karena uang), tunggu 5 detik, boost ulang
+                                if affordable then
+                                    notify("Auto Farm", "Rebirth gagal, kembali ke base", 3)
+                                    teleportToBase()
                                 else
-                                    report("Rebirth gagal")
-                                    waitMoneyChanged()
+                                    notify("Auto Farm", "Rebirth gagal (uang tidak cukup)", 3)
+                                end
+
+                                task.wait(5)
+
+                                if not alive() then return end
+
+                                if hasLava() then
+                                    local okBoost, boostSuccess = pcall(boostOre)
+
+                                    if not alive() then return end
+
+                                    if okBoost and boostSuccess then
+                                        notify("Auto Farm", "Boost Ore berhasil", 2)
+                                    end
                                 end
                             end
                         end
