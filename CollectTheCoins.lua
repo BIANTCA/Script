@@ -7,8 +7,8 @@ local player = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 local Window = Tumblr:Init({
- Name = "Vault Hub",
- Subtitle = "Auto Coin & Deposit",
+ Name = "Collect The Coins",
+ Subtitle = "Auto Coin & deposti by Bulb",
  FolderName = "TumblrConfigs",
  FileName = "Vault_" .. tostring(game.GameId) .. ".json"
 })
@@ -44,17 +44,72 @@ local function getHRP()
  return char and char:FindFirstChild("HumanoidRootPart")
 end
 
--- hanya MeshPart dengan nama persis "Coin"
+-- Deteksi mode deposit:
+-- "Vault" = ada workspace.VaultCoins -> VaultRemotes.Shop
+-- "Shop"  = tidak ada VaultCoins (map Rooms) -> Remotes.ShopAction
+local function getDepositMode()
+ if workspace:FindFirstChild("VaultCoins") then
+  return "Vault"
+ end
+ return "Shop"
+end
+
+-- Ada folder Rooms di ActiveDungeons?
+local function hasRooms()
+ local dungeons = workspace:FindFirstChild("ActiveDungeons")
+ if not dungeons then return false end
+ for _, run in ipairs(dungeons:GetChildren()) do
+  if run:FindFirstChild("Rooms") then
+   return true
+  end
+ end
+ return false
+end
+
+-- Fitur Rooms aktif hanya jika ada Rooms dan TIDAK ada VaultCoins
+local function isRoomsActive()
+ return not workspace:FindFirstChild("VaultCoins") and hasRooms()
+end
+
+-- Vault: MeshPart "Coin" | Rooms: BasePart "Coin"
 local function collectCoins(root, list)
  for _, v in ipairs(root:GetDescendants()) do
-  if v.Name == "Coin" and v:IsA("MeshPart") then
+  if v.Name == "Coin" and (v:IsA("MeshPart") or (getDepositMode() == "Shop" and v:IsA("BasePart"))) then
    table.insert(list, v)
   end
  end
 end
 
+local function coinPosition(obj)
+ if not obj or not obj.Parent then return nil end
+ if obj:IsA("Model") then
+  return obj:GetPivot().Position
+ elseif obj:IsA("BasePart") then
+  return obj.Position
+ end
+ return nil
+end
+
 local function getCoins()
  local list = {}
+
+ -- Rooms: koin ada di ActiveDungeons.<Run>.Treasure, punya attribute "CoinId"
+ if getDepositMode() == "Shop" then
+  local dungeons = workspace:FindFirstChild("ActiveDungeons")
+  if dungeons then
+   for _, run in ipairs(dungeons:GetChildren()) do
+    local treasure = run:FindFirstChild("Treasure")
+    if treasure then
+     for _, v in ipairs(treasure:GetDescendants()) do
+      if (v:IsA("BasePart") or v:IsA("Model")) and v:GetAttribute("CoinId") ~= nil then
+       table.insert(list, v)
+      end
+     end
+    end
+   end
+  end
+  return list
+ end
 
  local vaultCoins = workspace:FindFirstChild("VaultCoins")
  if vaultCoins then
@@ -78,11 +133,11 @@ local function getCoins()
  return list
 end
 
--- semua DepositChest di workspace
+-- DepositChest dicari di mana saja di workspace
 local function getChests()
  local list = {}
  for _, v in ipairs(workspace:GetDescendants()) do
-  if v.Name == "DepositChest" and (v:IsA("Model") or v:IsA("BasePart")) then
+  if (v:IsA("Model") or v:IsA("BasePart")) and (v.Name == "DepositChest" or v:GetAttribute("Deposit") ~= nil) then
    table.insert(list, v)
   end
  end
@@ -122,24 +177,101 @@ local function pressQ()
 end
 
 local function fireGrab(coin)
- local remote = ReplicatedStorage:FindFirstChild("VaultRemotes")
- remote = remote and remote:FindFirstChild("Grab")
+ -- Rooms: Remotes.Collect:FireServer(posisi, coinId, {coinId})
+ if getDepositMode() == "Shop" then
+  local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+  local collect = remotes and remotes:FindFirstChild("Collect")
+  local id = coin:GetAttribute("CoinId")
+  local pos = coinPosition(coin)
+  if collect and id ~= nil and pos then
+   collect:FireServer(pos, id, {id})
+  end
+  return
+ end
+
+ -- Vault: VaultRemotes.Grab
+ local folder = ReplicatedStorage:FindFirstChild("VaultRemotes")
+ local remote = folder and folder:FindFirstChild("Grab")
  if remote then
   remote:FireServer(coin)
  end
 end
 
+-- Vault  : VaultBag / VaultBagCap / VaultBanking
+-- Rooms  : attribute Bag / BagCap, fallback label RunHud (slots / cap)
+local hudSlots, hudCap
+
+local function findHudBag()
+ if hudSlots and hudSlots.Parent and hudCap and hudCap.Parent then
+  return hudSlots, hudCap
+ end
+ hudSlots, hudCap = nil, nil
+
+ local gui = player:FindFirstChild("PlayerGui")
+ local hud = gui and gui:FindFirstChild("RunHud", true)
+ if not hud then return nil end
+
+ for _, f in ipairs(hud:GetChildren()) do
+  if f:IsA("Frame") and f.Size.X.Offset == 340 and f.Size.Y.Offset == 140 then
+   for _, l in ipairs(f:GetChildren()) do
+    if l:IsA("TextLabel") then
+     if l.Position.X.Offset == 0 then
+      hudCap = l
+     elseif l.Position.X.Offset == 168 then
+      hudSlots = l
+     end
+    end
+   end
+   if hudSlots and hudCap then
+    return hudSlots, hudCap
+   end
+  end
+ end
+ return nil
+end
+
 local function getBag()
- return player:GetAttribute("VaultBag") or 0
+ if getDepositMode() == "Vault" then
+  return player:GetAttribute("VaultBag") or 0
+ end
+
+ local v = player:GetAttribute("Bag")
+ if type(v) == "number" then return v end
+
+ local slots = findHudBag()
+ return slots and tonumber(slots.Text) or 0
+end
+
+local function getBagCap()
+ if getDepositMode() == "Vault" then
+  return player:GetAttribute("VaultBagCap") or 20
+ end
+
+ local v = player:GetAttribute("BagCap")
+ if type(v) == "number" then return v end
+
+ local _, cap = findHudBag()
+ if cap then
+  if cap.Text == "\u{221E}" then return 99999 end
+  return tonumber(cap.Text) or 20
+ end
+ return 20
+end
+
+local function isBanking()
+ if getDepositMode() == "Vault" then
+  return player:GetAttribute("VaultBanking") and true or false
+ end
+ return false
 end
 
 local function bagFull()
- local cap = player:GetAttribute("VaultBagCap") or 20
+ local cap = getBagCap()
  return cap < 99999 and getBag() >= cap
 end
 
 local function bagEmpty()
- return getBag() <= 0 and not player:GetAttribute("VaultBanking")
+ return getBag() <= 0 and not isBanking()
 end
 
 -- spam pickup pada koin yang dituju
@@ -149,7 +281,9 @@ local function spamPickup(coin)
    break
   end
   pcall(fireGrab, coin)
-  pressGrabButton()
+  if getDepositMode() == "Vault" then
+   pressGrabButton()
+  end
   task.wait(0.03)
  end
 end
@@ -157,13 +291,25 @@ end
 local function spamDeposit()
  for _ = 1, S.DepositSpam do
   pcall(function()
-   ReplicatedStorage.VaultRemotes.Shop:FireServer("Deposit")
+   if getDepositMode() == "Vault" then
+    local vaultRemotes = ReplicatedStorage:FindFirstChild("VaultRemotes")
+    local shop = vaultRemotes and vaultRemotes:FindFirstChild("Shop")
+    if shop then
+     shop:FireServer("Deposit")
+    end
+   else
+    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+    local shopAction = remotes and remotes:FindFirstChild("ShopAction")
+    if shopAction then
+     shopAction:FireServer("Deposit")
+    end
+   end
   end)
   task.wait(0.05)
  end
 end
 
--- tahan posisi di chest (while teleport) + spam deposit
+-- tahan posisi di chest + spam deposit
 -- return true jika coin berkurang / banking berjalan
 local function tryChest(chest, timeout)
  local pos = chestPosition(chest)
@@ -186,7 +332,7 @@ local function tryChest(chest, timeout)
    task.spawn(spamDeposit)
   end
 
-  if getBag() < startBag or player:GetAttribute("VaultBanking") then
+  if getBag() < startBag or isBanking() then
    return true
   end
 
@@ -238,7 +384,15 @@ local function doDeposit()
  -- simpan posisi semula
  local backCFrame = startHRP.CFrame
 
- -- urutan: default dulu, lalu chest lain
+ -- urutan: default dulu, lalu chest lain berdasarkan jarak terdekat
+ local origin = startHRP.Position
+ table.sort(chests, function(a, b)
+  local pa, pb = chestPosition(a), chestPosition(b)
+  if not pa then return false end
+  if not pb then return true end
+  return (pa - origin).Magnitude < (pb - origin).Magnitude
+ end)
+
  local ordered = {}
  if S.DefaultChest and S.DefaultChest.Parent then
   table.insert(ordered, S.DefaultChest)
@@ -251,7 +405,7 @@ local function doDeposit()
 
  local success = false
  for _, chest in ipairs(ordered) do
-  if tryChest(chest, 4) then
+  if tryChest(chest, 5) then
    S.DefaultChest = chest
    holdUntilEmpty(chest)
    success = true
@@ -292,7 +446,7 @@ VaultTab:CreateToggle({
   local myToken = grabToken
   task.spawn(function()
    while S.Grab and myToken == grabToken do
-    if S.Busy or bagFull() or player:GetAttribute("VaultBanking") then
+    if S.Busy or bagFull() or isBanking() then
      aimPoint = nil
      task.wait(0.2)
     else
@@ -301,7 +455,7 @@ VaultTab:CreateToggle({
      if hrp and #coins > 0 then
       local coin = coins[math.random(1, #coins)]
       if coin and coin.Parent then
-       local p = coin.Position
+       local p = coinPosition(coin) or hrp.Position
 
        -- spawn di atas koin
        hrp.CFrame = CFrame.new(p + Vector3.new(0, S.HeightAbove, 0))
@@ -440,3 +594,224 @@ VaultTab:CreateSlider({
  CurrentValue = 5,
  Callback = function(v) S.QInterval = v end
 })
+
+-- ============================================
+-- ROOMS ONLY (tampil jika ada Rooms & tidak ada VaultCoins)
+-- ============================================
+local roomsFrames = {}
+local function addRoomsFrame(f)
+ if f then
+  table.insert(roomsFrames, f)
+ end
+end
+
+-- Status tas: FULL / EMPTY / FILLING
+addRoomsFrame(VaultTab:CreateSection("Rooms Status"))
+local statusFrame, _, statusLabel = VaultTab:CreateParagraph({
+ Title = "Bag Status",
+ Content = "Checking..."
+})
+addRoomsFrame(statusFrame)
+
+local function bagStatusText()
+ if player:GetAttribute("Bag") == nil and not findHudBag() then
+  return "Bag tidak terdeteksi (attribute Bag / label RunHud)"
+ end
+
+ local bag = getBag()
+ local cap = getBagCap()
+ local state
+ if bagFull() then
+  state = "FULL"
+ elseif bagEmpty() then
+  state = "EMPTY"
+ else
+  state = "FILLING"
+ end
+ return string.format("Bag: %d / %s\nStatus: %s", bag, cap < 99999 and tostring(cap) or "Unlimited", state)
+end
+
+-- Trophy (EquipTrophy via ShopAction)
+local okCfg, TrophyConfig = pcall(function()
+ return require(ReplicatedStorage.Shared.TrophyConfig)
+end)
+
+if okCfg and type(TrophyConfig) == "table" then
+ local HttpService = game:GetService("HttpService")
+ local selectedTrophy = "None"
+ local displayToId = {}
+
+ local function getUnlockedIds()
+  local ok, data = pcall(function()
+   return HttpService:JSONDecode(player:GetAttribute("Trophies") or "{}")
+  end)
+  if not ok or type(data) ~= "table" then
+   data = {}
+  end
+
+  local ids = {}
+  for tier = 1, #TrophyConfig.Tiers do
+   for _, board in ipairs(TrophyConfig.Boards) do
+    if board.MaxTier and board.MaxTier < tier then
+     continue
+    end
+    local id = TrophyConfig.Id(board.Id, tier)
+    local boardKey, boardTier = TrophyConfig.Parse(id)
+    if data[boardKey] == boardTier or data[boardKey] == "all" then
+     table.insert(ids, id)
+    end
+   end
+  end
+  return ids
+ end
+
+ local function buildOptions()
+  displayToId = {["None"] = "None"}
+  local options = {"None"}
+  for _, id in ipairs(getUnlockedIds()) do
+   local label = TrophyConfig.DisplayName(id)
+   if displayToId[label] then
+    label = label .. " (" .. id .. ")"
+   end
+   displayToId[label] = id
+   table.insert(options, label)
+  end
+  return options
+ end
+
+ addRoomsFrame(VaultTab:CreateSection("Trophy"))
+
+ local trophyDropdown = VaultTab:CreateDropdown({
+  Name = "Select Trophy",
+  Options = buildOptions(),
+  CurrentOption = "None",
+  Callback = function(option)
+   selectedTrophy = displayToId[option] or "None"
+  end
+ })
+ addRoomsFrame(trophyDropdown.Frame)
+
+ local equipBtn = VaultTab:CreateButton({
+  Name = "Equip Trophy",
+  Interact = "Equip",
+  Callback = function()
+   pcall(function()
+    ReplicatedStorage.Remotes.ShopAction:FireServer("EquipTrophy", selectedTrophy)
+   end)
+  end
+ })
+ addRoomsFrame(equipBtn.Frame)
+
+ local refreshBtn = VaultTab:CreateButton({
+  Name = "Refresh Trophy List",
+  Interact = "Refresh",
+  Callback = function()
+   selectedTrophy = "None"
+   trophyDropdown:Refresh(buildOptions(), false)
+  end
+ })
+ addRoomsFrame(refreshBtn.Frame)
+
+ player:GetAttributeChangedSignal("Trophies"):Connect(function()
+  trophyDropdown:Refresh(buildOptions(), true)
+ end)
+end
+
+-- Rooms Tools (ShopAction)
+local function shopAction(...)
+ local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+ local sa = remotes and remotes:FindFirstChild("ShopAction")
+ if sa then
+  sa:FireServer(...)
+ end
+end
+
+addRoomsFrame(VaultTab:CreateSection("Rooms Tools"))
+
+local roomIds = {"Shop", "Armory", "Chapel", "DiningHall", "GreatHall", "Library", "ThroneRoom", "TreasureRoom"}
+local selectedRoom = "Shop"
+
+local roomDropdown = VaultTab:CreateDropdown({
+ Name = "Teleport Room",
+ Options = roomIds,
+ CurrentOption = "Shop",
+ Callback = function(option)
+  selectedRoom = option
+ end
+})
+addRoomsFrame(roomDropdown.Frame)
+
+local roomBtn = VaultTab:CreateButton({
+ Name = "Teleport To Room",
+ Interact = "Go",
+ Callback = function()
+  shopAction("Teleport", selectedRoom)
+ end
+})
+addRoomsFrame(roomBtn.Frame)
+
+local boostChoice = 1
+local boostDropdown = VaultTab:CreateDropdown({
+ Name = "Boost Choice",
+ Options = {"1", "2", "3"},
+ CurrentOption = "1",
+ Callback = function(option)
+  boostChoice = tonumber(option) or 1
+ end
+})
+addRoomsFrame(boostDropdown.Frame)
+
+local function roomsLoopToggle(name, flag, interval, fn)
+ local token = 0
+ local t = VaultTab:CreateToggle({
+  Name = name,
+  Flag = flag,
+  CurrentValue = false,
+  Callback = function(v)
+   token += 1
+   if not v then return end
+   local my = token
+   task.spawn(function()
+    while my == token do
+     if isRoomsActive() then
+      pcall(fn)
+     end
+     task.wait(interval)
+    end
+   end)
+  end
+ })
+ addRoomsFrame(t.Frame)
+end
+
+roomsLoopToggle("Auto Pick Boost", "RoomsAutoBoost", 1, function()
+ shopAction("PickBoost", boostChoice)
+end)
+
+roomsLoopToggle("Auto Upgrade Bag", "RoomsAutoBag", 2, function()
+ shopAction("BuyRunBag")
+end)
+
+roomsLoopToggle("Auto Feed Mimic", "RoomsAutoMimic", 1, function()
+ if player:GetAttribute("Pass_Mimic") == true then
+  shopAction("FeedMimic")
+ end
+end)
+
+-- Tampilkan / sembunyikan elemen Rooms + update status tas
+task.spawn(function()
+ local lastActive = nil
+ while true do
+  local active = isRoomsActive()
+  if active ~= lastActive then
+   lastActive = active
+   for _, f in ipairs(roomsFrames) do
+    f.Visible = active
+   end
+  end
+  if active and statusLabel then
+   statusLabel.Text = bagStatusText()
+  end
+  task.wait(0.5)
+ end
+end)
