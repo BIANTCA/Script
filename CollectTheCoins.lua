@@ -6,9 +6,16 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
+-- UpgradeConfig hanya ada di game Rooms (nil jika tidak ada)
+-- okUC = true jika module berhasil di-require
+local UpgradeConfig = nil
+local okUC = pcall(function()
+ UpgradeConfig = require(ReplicatedStorage.Shared.UpgradeConfig)
+end)
+
 local Window = Tumblr:Init({
- Name = "Collect The Coins",
- Subtitle = "Auto Coin & deposti by Bulb",
+ Name = "Vault Hub",
+ Subtitle = "Auto Coin & Deposit",
  FolderName = "TumblrConfigs",
  FileName = "Vault_" .. tostring(game.GameId) .. ".json"
 })
@@ -90,25 +97,44 @@ local function coinPosition(obj)
  return nil
 end
 
+local roomsCoinCache, roomsCoinCacheT = {}, 0
+
 local function getCoins()
  local list = {}
 
  -- Rooms: koin ada di ActiveDungeons.<Run>.Treasure, punya attribute "CoinId"
+ -- Treasure bisa berisi ribuan koin -> hasil di-cache 3 detik
  if getDepositMode() == "Shop" then
+  if #roomsCoinCache > 0 and os.clock() - roomsCoinCacheT < 3 then
+   return roomsCoinCache
+  end
+
+  local fresh = {}
   local dungeons = workspace:FindFirstChild("ActiveDungeons")
   if dungeons then
    for _, run in ipairs(dungeons:GetChildren()) do
     local treasure = run:FindFirstChild("Treasure")
     if treasure then
-     for _, v in ipairs(treasure:GetDescendants()) do
-      if (v:IsA("BasePart") or v:IsA("Model")) and v:GetAttribute("CoinId") ~= nil then
-       table.insert(list, v)
+     local before = #fresh
+     for _, v in ipairs(treasure:GetChildren()) do
+      if v:GetAttribute("CoinId") ~= nil then
+       table.insert(fresh, v)
+      end
+     end
+     -- koin bersarang (bukan anak langsung Treasure)
+     if #fresh == before then
+      for _, v in ipairs(treasure:GetDescendants()) do
+       if (v:IsA("BasePart") or v:IsA("Model")) and v:GetAttribute("CoinId") ~= nil then
+        table.insert(fresh, v)
+       end
       end
      end
     end
    end
   end
-  return list
+
+  roomsCoinCache, roomsCoinCacheT = fresh, os.clock()
+  return fresh
  end
 
  local vaultCoins = workspace:FindFirstChild("VaultCoins")
@@ -176,16 +202,102 @@ local function pressQ()
  end)
 end
 
-local function fireGrab(coin)
- -- Rooms: Remotes.Collect:FireServer(posisi, coinId, {coinId})
- if getDepositMode() == "Shop" then
-  local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-  local collect = remotes and remotes:FindFirstChild("Collect")
-  local id = coin:GetAttribute("CoinId")
-  local pos = coinPosition(coin)
-  if collect and id ~= nil and pos then
-   collect:FireServer(pos, id, {id})
+-- Stat tool saat ini (level upgrade run tidak terbaca, jadi memakai stat dasar = aman)
+local function currentToolStats()
+ if not UpgradeConfig then return nil end
+ local id = player:GetAttribute("Tool") or "Hands"
+ local tool = UpgradeConfig.GetTool(id)
+ local ok, stats = pcall(UpgradeConfig.ToolStats, tool, nil, nil)
+ return ok and stats or tool
+end
+
+-- Tool yang sedang dipakai (attribute "Tool"), data dasar dari UpgradeConfig
+local function currentToolInfo()
+ if okUC and type(UpgradeConfig) == "table" then
+  local tool = UpgradeConfig.GetTool(player:GetAttribute("Tool") or "Hands")
+  if tool then return tool end
+ end
+ return {Id = "Hands", Cooldown = 0.25, Radius = 0, Max = 1}
+end
+
+local coinOverlap = OverlapParams.new()
+coinOverlap.FilterType = Enum.RaycastFilterType.Include
+
+-- Koin di sekitar posisi (spatial query seperti game, bukan scan semua koin)
+local function nearbyCoinEntries(pos, radius)
+ local folders = {}
+ local dungeons = workspace:FindFirstChild("ActiveDungeons")
+ if dungeons then
+  for _, run in ipairs(dungeons:GetChildren()) do
+   local t = run:FindFirstChild("Treasure")
+   if t then table.insert(folders, t) end
   end
+ end
+ if #folders == 0 then return {} end
+
+ coinOverlap.FilterDescendantsInstances = folders
+ local entries, seen = {}, {}
+ for _, part in ipairs(workspace:GetPartBoundsInRadius(pos, radius + 1.5, coinOverlap)) do
+  local inst = part
+  if inst:GetAttribute("CoinId") == nil then
+   inst = part:FindFirstAncestorWhichIsA("Model")
+   if inst and inst:GetAttribute("CoinId") == nil then inst = nil end
+  end
+  if inst and not seen[inst] then
+   seen[inst] = true
+   local p = coinPosition(inst)
+   if p then table.insert(entries, {pos = p, inst = inst}) end
+  end
+ end
+ return entries
+end
+
+-- Rooms: Remotes.Collect:FireServer(posisi, coinId, {coinId, ...})
+-- Koin sekitar ikut dipilih sesuai Radius/Max tool (GrabSelection milik game)
+local function collectRooms(coin)
+ local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+ local collect = remotes and remotes:FindFirstChild("Collect")
+ local id = coin:GetAttribute("CoinId")
+ local pos = coinPosition(coin)
+ if not (collect and id ~= nil and pos) then return end
+
+ local ids = {id}
+
+ if okUC and type(UpgradeConfig) == "table" then
+  local tool = currentToolInfo()
+  local range = math.max(tool.Radius or 0, 3.4)
+  local entries = nearbyCoinEntries(pos, range)
+  local target = nil
+  for _, e in ipairs(entries) do
+   if e.inst == coin then target = e break end
+  end
+
+  local okSel, sel = pcall(UpgradeConfig.GrabSelection, tool, pos, target, entries)
+  if okSel and type(sel) == "table" and #sel > 0 then
+   ids = {}
+   local hasTarget = false
+   for _, e in ipairs(sel) do
+    local cid = e.inst:GetAttribute("CoinId")
+    if cid ~= nil then
+     table.insert(ids, cid)
+     if cid == id then hasTarget = true end
+    end
+   end
+   if not hasTarget then
+    table.insert(ids, 1, id)
+    if tool.Max and #ids > tool.Max then
+     table.remove(ids)
+    end
+   end
+  end
+ end
+
+ collect:FireServer(pos, id, ids)
+end
+
+local function fireGrab(coin)
+ if getDepositMode() == "Shop" then
+  collectRooms(coin)
   return
  end
 
@@ -275,15 +387,33 @@ local function bagEmpty()
 end
 
 -- spam pickup pada koin yang dituju
-local function spamPickup(coin)
+local function spamPickup(coin, coinList)
+ -- Rooms: 1x Collect per cooldown tool (cooldown dari UpgradeConfig)
+ if getDepositMode() == "Shop" then
+  local tool = currentToolInfo()
+
+  -- Magnet menarik koin sendiri, tidak perlu Collect
+  if tool.Id == "Magnet" then
+   task.wait(math.max(tool.Cooldown or 0.12, 0.2))
+   return
+  end
+
+  for _ = 1, S.GrabSpam do
+   if not S.Grab or not coin or not coin.Parent or bagFull() then
+    break
+   end
+   pcall(collectRooms, coin)
+   task.wait((tool.Cooldown or 0.25) + 0.02)
+  end
+  return
+ end
+
  for _ = 1, S.GrabSpam do
   if not S.Grab or not coin or not coin.Parent or bagFull() then
    break
   end
   pcall(fireGrab, coin)
-  if getDepositMode() == "Vault" then
-   pressGrabButton()
-  end
+  pressGrabButton()
   task.wait(0.03)
  end
 end
@@ -368,6 +498,32 @@ local function holdUntilEmpty(chest)
  end
 end
 
+-- Chest di room yang masih terkunci (Gate.Block masih CanCollide)
+local function isChestLocked(chest)
+ local rooms = chest:FindFirstAncestor("Rooms")
+ if not rooms then return false end
+
+ local room = chest
+ while room and room.Parent ~= rooms do
+  room = room.Parent
+ end
+ if not room then return false end
+
+ local run = rooms.Parent
+ local gates = run and run:FindFirstChild("Gates")
+ if not gates then return false end
+
+ for _, g in ipairs(gates:GetChildren()) do
+  if g:GetAttribute("Room") == room.Name then
+   local block = g:FindFirstChild("Block")
+   if block and block.CanCollide then
+    return true
+   end
+  end
+ end
+ return false
+end
+
 local function doDeposit()
  if S.Busy then return end
 
@@ -387,6 +543,8 @@ local function doDeposit()
  -- urutan: default dulu, lalu chest lain berdasarkan jarak terdekat
  local origin = startHRP.Position
  table.sort(chests, function(a, b)
+  local la, lb = isChestLocked(a), isChestLocked(b)
+  if la ~= lb then return not la end
   local pa, pb = chestPosition(a), chestPosition(b)
   if not pa then return false end
   if not pb then return true end
@@ -394,7 +552,7 @@ local function doDeposit()
  end)
 
  local ordered = {}
- if S.DefaultChest and S.DefaultChest.Parent then
+ if S.DefaultChest and S.DefaultChest.Parent and not isChestLocked(S.DefaultChest) then
   table.insert(ordered, S.DefaultChest)
  end
  for _, c in ipairs(chests) do
@@ -453,7 +611,18 @@ VaultTab:CreateToggle({
      local hrp = getHRP()
      local coins = getCoins()
      if hrp and #coins > 0 then
-      local coin = coins[math.random(1, #coins)]
+      local coin = nil
+      for _ = 1, 25 do
+       if #coins == 0 then break end
+       local i = math.random(1, #coins)
+       local c = coins[i]
+       if c and c.Parent then
+        coin = c
+        break
+       end
+       coins[i] = coins[#coins]
+       coins[#coins] = nil
+      end
       if coin and coin.Parent then
        local p = coinPosition(coin) or hrp.Position
 
@@ -470,7 +639,7 @@ VaultTab:CreateToggle({
        task.wait(0.1)
 
        -- spam pickup
-       spamPickup(coin)
+       spamPickup(coin, coins)
       end
      end
      task.wait(S.GrabDelay)
@@ -628,7 +797,12 @@ local function bagStatusText()
  else
   state = "FILLING"
  end
- return string.format("Bag: %d / %s\nStatus: %s", bag, cap < 99999 and tostring(cap) or "Unlimited", state)
+ local text = string.format("Bag: %d / %s\nStatus: %s", bag, cap < 99999 and tostring(cap) or "Unlimited", state)
+ local st = currentToolStats()
+ if st then
+  text = text .. "\nTool: " .. tostring(st.Id) .. " | CD " .. tostring(st.Cooldown) .. "s | Max " .. tostring(st.Max) .. " | Reach " .. tostring(st.Reach)
+ end
+ return text
 end
 
 -- Trophy (EquipTrophy via ShopAction)
@@ -728,7 +902,18 @@ end
 
 addRoomsFrame(VaultTab:CreateSection("Rooms Tools"))
 
-local roomIds = {"Shop", "Armory", "Chapel", "DiningHall", "GreatHall", "Library", "ThroneRoom", "TreasureRoom"}
+local roomIds = {"Shop"}
+local okDC, DungeonConfig = pcall(function()
+ return require(ReplicatedStorage.Shared.DungeonConfig)
+end)
+if okDC and type(DungeonConfig) == "table" then
+ local dungeon = DungeonConfig.Get(DungeonConfig.DefaultDungeon)
+ for _, r in ipairs(dungeon and dungeon.Rooms or {}) do
+  table.insert(roomIds, r.Id)
+ end
+else
+ roomIds = {"Shop", "Gatehouse", "GreatHall", "Library", "Armory", "Chapel", "TreasureRoom", "ThroneRoom", "DiningHall"}
+end
 local selectedRoom = "Shop"
 
 local roomDropdown = VaultTab:CreateDropdown({
@@ -750,16 +935,115 @@ local roomBtn = VaultTab:CreateButton({
 })
 addRoomsFrame(roomBtn.Frame)
 
-local boostChoice = 1
+local boostChoice = "Smart"
 local boostDropdown = VaultTab:CreateDropdown({
  Name = "Boost Choice",
- Options = {"1", "2", "3"},
- CurrentOption = "1",
+ Options = {"Smart", "1", "2", "3"},
+ CurrentOption = "Smart",
  Callback = function(option)
-  boostChoice = tonumber(option) or 1
+  boostChoice = option
  end
 })
 addRoomsFrame(boostDropdown.Frame)
+
+-- Prioritas boost (nama dari DungeonConfig.Boosts), makin awal makin diutamakan
+local boostPriority = {
+ "Auto Deposit", "Jackpot", "Midas Touch", "Chain Grab", "Big Scoop", "Combo Streak",
+ "Gold Fever", "Lucky Charm", "Heavy Sack", "Deep Pockets", "Nimble Fingers",
+ "Pocket Magnet", "Helper Boost", "Ruby Hunter", "Loose Change", "Quick Feet"
+}
+
+local boostPanel = nil
+
+-- Panel "PICK A BOOST!" di RunHud (3 kartu, nama boost di label Position.Y = 122)
+local function findBoostPanel()
+ local gui = player:FindFirstChild("PlayerGui")
+ if not gui then return nil end
+ for _, d in ipairs(gui:GetDescendants()) do
+  if d:IsA("TextLabel") and d.Text == "PICK A BOOST!" then
+   return d.Parent and d.Parent.Parent
+  end
+ end
+ return nil
+end
+
+-- Index kartu terbaik (1-3); nil jika tawaran boost belum tampil
+local function pickBoostIndex()
+ if boostChoice ~= "Smart" then
+  return tonumber(boostChoice) or 1
+ end
+
+ if not (boostPanel and boostPanel.Parent) then
+  boostPanel = findBoostPanel()
+ end
+ if not boostPanel then return 1 end
+ if not boostPanel.Visible then return nil end
+
+ local best, bestScore, index = nil, math.huge, 0
+ for _, card in ipairs(boostPanel:GetChildren()) do
+  if card:IsA("TextButton") then
+   index += 1
+   if card.Visible then
+    local name = ""
+    for _, l in ipairs(card:GetChildren()) do
+     if l:IsA("TextLabel") and l.Position.Y.Offset == 122 then
+      name = l.Text
+     end
+    end
+    local score = table.find(boostPriority, name) or 99
+    if score < bestScore then
+     best, bestScore = index, score
+    end
+   end
+  end
+ end
+ return best or 1
+end
+
+if UpgradeConfig then
+ local toolIds = {}
+ for _, t in ipairs(UpgradeConfig.Tools) do
+  table.insert(toolIds, t.Id)
+ end
+ local selectedTool = toolIds[1] or "Hands"
+
+ local toolDropdown = VaultTab:CreateDropdown({
+  Name = "Select Tool",
+  Options = toolIds,
+  CurrentOption = selectedTool,
+  Callback = function(option)
+   selectedTool = option
+  end
+ })
+ addRoomsFrame(toolDropdown.Frame)
+
+ local equipToolBtn = VaultTab:CreateButton({
+  Name = "Equip Tool",
+  Interact = "Equip",
+  Callback = function()
+   shopAction("RunEquip", selectedTool)
+  end
+ })
+ addRoomsFrame(equipToolBtn.Frame)
+
+ local buyToolBtn = VaultTab:CreateButton({
+  Name = "Buy Tool",
+  Interact = "Buy",
+  Callback = function()
+   shopAction("BuyRunTool", selectedTool)
+  end
+ })
+ addRoomsFrame(buyToolBtn.Frame)
+end
+
+local skipTutBtn = VaultTab:CreateButton({
+ Name = "Skip Tutorial",
+ Interact = "Skip",
+ Callback = function()
+  shopAction("SkipRunTutorial")
+ end
+})
+addRoomsFrame(skipTutBtn.Frame)
 
 local function roomsLoopToggle(name, flag, interval, fn)
  local token = 0
@@ -785,7 +1069,10 @@ local function roomsLoopToggle(name, flag, interval, fn)
 end
 
 roomsLoopToggle("Auto Pick Boost", "RoomsAutoBoost", 1, function()
- shopAction("PickBoost", boostChoice)
+ local idx = pickBoostIndex()
+ if idx then
+  shopAction("PickBoost", idx)
+ end
 end)
 
 roomsLoopToggle("Auto Upgrade Bag", "RoomsAutoBag", 2, function()
@@ -795,6 +1082,22 @@ end)
 roomsLoopToggle("Auto Feed Mimic", "RoomsAutoMimic", 1, function()
  if player:GetAttribute("Pass_Mimic") == true then
   shopAction("FeedMimic")
+ end
+end)
+
+-- Urutan tool terbaik (throughput = Max / Cooldown dari UpgradeConfig)
+local toolPriority = {"CanisterVacuum", "Vacuum", "LawnMower", "Magnet", "StrawBroom", "Rake", "Shovel", "Hands"}
+
+roomsLoopToggle("Auto Equip Best Tool", "RoomsAutoTool", 5, function()
+ for _, id in ipairs(toolPriority) do
+  if player:GetAttribute("Tool") == id then
+   return
+  end
+  shopAction("RunEquip", id)
+  task.wait(0.4)
+  if player:GetAttribute("Tool") == id then
+   return
+  end
  end
 end)
 
