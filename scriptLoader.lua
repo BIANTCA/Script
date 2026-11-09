@@ -437,7 +437,7 @@ ScriptTab:CreateButton({
 })
 
 -- Load Universal Tab
-local Universal = loadstring(game:HttpGet("https://gist.githubusercontent.com/BIANTCA/b5f56f98cb51bb6275d359605cdd55b9/raw/d9b9ddf7a29e49afc010822837d58abc262d3549/Universal.lua"))()
+local Universal = loadstring(game:HttpGet("https://pastebin.com/436invAL"))()
 Universal.CreateUniversalTab(
  Window,
  Tumblr,
