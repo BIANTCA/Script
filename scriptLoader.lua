@@ -1,4 +1,4 @@
-local Tumblr = loadstring(game:HttpGet('https://pastebin.com/raw/2BGUWvbd'))()
+local Tumblr = loadstring(game:HttpGet('https://pastebin.com/raw/ECe9auLu'))()
 local HttpService = game:GetService("HttpService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local CoreGui = game:GetService("CoreGui")
@@ -11,7 +11,7 @@ gameInfo = (ok and info and info.Name) or "Unknown Game"
 
 local Window = Tumblr:Init({
  Name = "Bulb Hub",
- Subtitle = "Universal Script",
+ Subtitle = "Script loader Beta",
  FolderName = "TumblrConfigs",
  FileName = tostring(game.GameId)..".json"
 })
@@ -25,6 +25,7 @@ Window:CreateSettingsParagraph({
  Content = "NEW: Favorites system! Star your favorite scripts for quick access per game."
 })
 
+-- Favorites storage (per GameId)
 local favoriteScripts = {}
 local favoritesFolderName = "TumblrScriptFavorites"
 local favoritesFileName = tostring(game.GameId) .. "_favorites.json"
@@ -437,7 +438,7 @@ ScriptTab:CreateButton({
 })
 
 -- Load Universal Tab
-local Universal = loadstring(game:HttpGet("https://pastebin.com/436invAL"))()
+local Universal = loadstring(game:HttpGet("https://pastebin.com/raw/436invAL"))()
 Universal.CreateUniversalTab(
  Window,
  Tumblr,
