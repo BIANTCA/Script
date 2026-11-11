@@ -1,4 +1,4 @@
-local Tumblr = loadstring(game:HttpGet('https://pastebin.com/raw/ECe9auLu'))()
+local Tumblr = loadstring(game:HttpGet('https://pastebin.com/raw/2BGUWvbd'))()
 local HttpService = game:GetService("HttpService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local CoreGui = game:GetService("CoreGui")
