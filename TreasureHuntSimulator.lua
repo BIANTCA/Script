@@ -11,7 +11,7 @@ local LocalPlayer = Players.LocalPlayer
 
 local Window = luaCxre:Init({
     Name = "Treasure Hunt Simulator",
-    Subtitle = "By GANTJENK",
+    Subtitle = "By luaCxre",
     FolderName = "luaCxreConfigs",
     FileName = "TreasureHunt.json",
     LoadedNotification = false
