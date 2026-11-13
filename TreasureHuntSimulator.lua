@@ -1,1 +1,555 @@
-local v0=loadstring(game:HttpGet("https://sirius.menu/rayfield"))();local v1=game:GetService("Workspace");local v2=game:GetService("ReplicatedStorage");local v3=game:GetService("Players").LocalPlayer;local v4=v1:WaitForChild(v3.Name);local v5=game:GetService("Players");local v6=game:GetService("RunService");local v7=v2:WaitForChild("Events"):WaitForChild("Checkout");local v8=v0:CreateWindow({Name="Treasure Hunt Simulator",LoadingTitle="Rayfield GUI",LoadingSubtitle="By GANTJENK",ConfigurationSaving={Enabled=false}});local v9=v8:CreateTab("Main",4483362458 -0 );_G.MainTab=v9;local v10=v8:CreateTab("Chests",4392996583 -  -90365875 );local v11=false;local v12=false;local v13=false;local v14={};local v15=v2:WaitForChild("Shovels");local v16={};local function v17() local v26=0 + 0 ;local v27;while true do if (v26==(997 -(915 + 82))) then v27=v3.Character and v3.Character:FindFirstChildOfClass("Tool") ;if ( not v27 and v3.Backpack:FindFirstChildOfClass("Tool")) then local v49=0 -0 ;while true do if (v49==(0 + 0)) then v27=v3.Backpack:FindFirstChildOfClass("Tool");v3.Character.Humanoid:EquipTool(v27);break;end end end v26=767 -(745 + 21) ;end if (v26==(1 -0)) then return v27;end end end for v28,v29 in ipairs(v15:GetChildren()) do if v29:IsA("Folder") then table.insert(v16,v29.Name);end end local v18=v17().Name;if  not table.find(v16,v17().Name) then v18=v16[1188 -(1069 + 118) ] or "None" ;end local function v19(v30) pcall(function() v7:FireServer(v30);end);end local function v20() local v31=0 -0 ;local v32;local v33;while true do if (v31==(11 -8)) then v32.CFrame=v33;break;end if (v31==2) then v2.Events.AreaSell:FireServer();task.wait(0.15 -0 );v31=3;end if (v31==(0 -0)) then v32=v4:FindFirstChild("HumanoidRootPart");if  not v32 then return;end v31=1 + 0 ;end if (v31==(1 -0)) then v33=v32.CFrame;v32.CFrame=CFrame.new(3 + 0 ,801 -(368 + 423) , -(502 -342));v31=20 -(10 + 8) ;end end end local v21=v2:FindFirstChild("Chests") and v2.Chests:FindFirstChild("Rainbow Chest") ;local v22=v21 and v21:FindFirstChildWhichIsA("BasePart") and v21:FindFirstChildWhichIsA("BasePart").BrickColor.Color ;task.spawn(function() while task.wait() do if v11 then local v44=0 -0 ;local v45;local v46;while true do if (v44==(442 -(416 + 26))) then v45=nil;v46="";v44=3 -2 ;end if (v44==(2 -1)) then for v55,v56 in pairs(v1.SandBlocks:GetChildren()) do if  not v11 then v20();break;end if v56:FindFirstChild("Chest") then local v59=v56.Chest.Name:lower();local v60=false;if (string.find(v59,"rainbow") or (v22 and v56.BrickColor and (v56.BrickColor.Color==v22))) then v60=true;end for v63,v64 in pairs(v14) do if (v64 and string.find(v59,v63:lower())) then v60=true;break;end end if v60 then continue;end if ((v56.CFrame.X> -(18 + 22)) and (v56.CFrame.X<(35 -15)) and (v56.CFrame.Z< -(613 -(145 + 293))) and (v56.CFrame.Z> -(722 -487))) then local v65=0 + 0 ;local v66;while true do if (v65==(431 -(44 + 386))) then if (v66==true) then local v68,v69=pcall(function() if (v13 and (v3.PlayerGui.Gui.Popups.BackpackFull.Visible==true)) then v20();end v45.CanCollide=false;local v72=v3.PlayerGui.Gui.Buttons.Coins.Amount.Text;repeat if (v13 and (v3.PlayerGui.Gui.Popups.BackpackFull.Visible==true)) then v20();end if  not v11 then task.wait(0.1 -0 );v4.HumanoidRootPart.CFrame=CFrame.new(1489 -(998 + 488) ,10, -(174 -(9 + 5)));task.wait(377 -(85 + 291) );break;end v4.HumanoidRootPart.Anchored=true;task.wait();v4.HumanoidRootPart.CFrame=v45.CFrame;task.wait();v4.HumanoidRootPart.Anchored=false;local v76=v17();if (v76.Name~=v18) then v19(v18);end if (v76 and v76:FindFirstChild("RemoteClick")) then v76.RemoteClick:FireServer(v1.SandBlocks[v46]);end task.wait();until v3.PlayerGui.Gui.Buttons.Coins.Amount.Text~=v72  v66=false;end);if  not v68 then warn(v69);end end break;end if ((1265 -(243 + 1022))==v65) then v66=false;if (v56~=nil) then local v70=0 + 0 ;while true do if (v70==(0 + 0)) then v66=true;v45=v56;v70=773 -(201 + 571) ;end if (v70==(1139 -(116 + 1022))) then v46=v56.Name;break;end end end v65=4 -3 ;end end end end end break;end end end end end);v9:CreateSection("Main menu");v9:CreateDropdown({Name="Select Shovel",Options=v16,CurrentOption={v18},Callback=function(v34) if (type(v34)=="table") then v18=v34[255 -(163 + 91) ];else v18=v34;end v19(v18);end});v9:CreateToggle({Name="Auto Farm",CurrentValue=false,Callback=function(v35) local v36=1930 -(1869 + 61) ;while true do if (v36==(0 + 0)) then v11=v35;v0:Notify({Title="Auto Farm",Content=(v11 and "Enabled ✅") or "Disabled ❌" ,Duration=7 -5 });break;end end end});v9:CreateToggle({Name="Auto Rebirth",CurrentValue=false,Callback=function(v37) local v38=0 -0 ;while true do if (v38==(0 + 0)) then v12=v37;v0:Notify({Title="Auto Rebirth",Content=(v12 and "Enabled ✅") or "Disabled ❌" ,Duration=7 -5 });break;end end end});v9:CreateToggle({Name="Auto Sell",CurrentValue=true,Callback=function(v39) v13=v39;end});local v23=v2:FindFirstChild("Chests");if v23 then local v40=0 + 0 ;while true do if (v40==(859 -(814 + 45))) then v10:CreateSection("Exclude Chests (Enabled = skipped)");for v50,v51 in pairs(v23:GetChildren()) do local v52=0 -0 ;local v53;while true do if (v52==(1 + 0)) then v10:CreateToggle({Name="Exclude "   .. v51.Name ,CurrentValue=v53,Callback=function(v61) local v62=0 + 0 ;while true do if ((885 -(261 + 624))==v62) then v14[v51.Name]=v61;v0:Notify({Title="Chest Filter Updated",Content=v51.Name   .. ((v61 and " will be skipped ✅") or " will be farmed 🪓") ,Duration=720 -(15 + 703) });break;end end end});break;end if (v52==(0 -0)) then v53=(v51.Name:lower():find("rainbow") and true) or false ;v14[v51.Name]=v53;v52=1081 -(1020 + 60) ;end end end break;end end end local function v24() while true do wait(1);if (v12==true) then local v47=game.Players.LocalPlayer.PlayerGui.Gui.Buttons.Coins.Amount.Text:gsub(",","");local v48=game.Players.LocalPlayer.PlayerGui.Gui.Rebirth.Needed.Coins.Amount.Text:gsub(",","");if (tonumber(v47)>tonumber(v48)) then local v54=1423 -(630 + 793) ;while true do if (v54==1) then game.Players.LocalPlayer.PlayerGui.Gui.Popups.GiveReward.Visible=false;wait();break;end if ((0 -0)==v54) then game.ReplicatedStorage.Events.Rebirth:FireServer();repeat wait(0.1 -0 );until game.Players.LocalPlayer.PlayerGui.Gui.Popups.GiveReward.Visible==true  v54=1 + 0 ;end end end end end end spawn(v24);local v25=loadstring(game:HttpGet("https://raw.githubusercontent.com/BIANTCA/Script/refs/heads/main/universal.lua"))();v25.CreateUniversalTab(v8,v0,v5,v6);
+local luaCxre = loadstring(game:HttpGet("https://pastebin.com/raw/i1hqRFbq"))()
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local VirtualUser = game:GetService("VirtualUser")
+local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+
+local Window = luaCxre:Init({
+    Name = "Treasure Hunt Simulator",
+    Subtitle = "By GANTJENK",
+    FolderName = "luaCxreConfigs",
+    FileName = "TreasureHunt.json",
+    LoadedNotification = false
+})
+
+local MainTab = Window:CreateTab("Main", 4483362458)
+_G.MainTab = MainTab
+local ChestsTab = Window:CreateTab("Chests", 4483362458)
+
+local Events = ReplicatedStorage:WaitForChild("Events")
+local AreaSell = Events:WaitForChild("AreaSell")
+local RebirthEvent = Events:WaitForChild("Rebirth")
+local EquipShovel = Events:FindFirstChild("EquipShovel")
+local Checkout = Events:FindFirstChild("Checkout")
+local SandBlocks = Workspace:WaitForChild("SandBlocks")
+local Shovels = ReplicatedStorage:WaitForChild("Shovels")
+local ChestsFolder = ReplicatedStorage:FindFirstChild("Chests")
+local OldChestsFolder = ReplicatedStorage:FindFirstChild("OldChests")
+
+local QUICK_DIG_ID = 3831582
+local SELL_POS = CFrame.new(3, 10, -160)
+local AREA = {minX = -40, maxX = 20, minZ = -235, maxZ = -175}
+
+local State = {
+    autoFarm = false,
+    autoDig = false,
+    autoSell = true,
+    autoRebirth = false,
+    antiAfk = false,
+    limitArea = true,
+    digDelay = 0.05,
+    digTimeout = 10,
+    selectedShovel = nil,
+    chestsFarmed = 0,
+    status = "Idle",
+}
+
+local excludedChests = {}
+local blacklist = {}
+local selling = false
+local quickDig = false
+local uiReady = false
+
+local function notify(title, content, duration)
+    pcall(function()
+        luaCxre:Notify({Title = title, Content = content, Duration = duration or 2})
+    end)
+end
+
+pcall(function()
+    quickDig = MarketplaceService:UserOwnsGamePassAsync(LocalPlayer.UserId, QUICK_DIG_ID)
+end)
+
+local function getHRP()
+    local char = LocalPlayer.Character
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function getTool()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then return tool end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local bp = LocalPlayer:FindFirstChildOfClass("Backpack")
+    if hum and bp then
+        local pick
+        if State.selectedShovel then
+            pick = bp:FindFirstChild(State.selectedShovel)
+        end
+        pick = pick or bp:FindFirstChildOfClass("Tool")
+        if pick then
+            hum:EquipTool(pick)
+            task.wait(0.1)
+            return char:FindFirstChildOfClass("Tool")
+        end
+    end
+    return nil
+end
+
+local function getGui()
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    return pg and pg:FindFirstChild("Gui")
+end
+
+local function backpackFull()
+    local ok, res = pcall(function()
+        return getGui().Popups.BackpackFull.Visible == true
+    end)
+    return ok and res
+end
+
+local function readNumber(path)
+    local ok, res = pcall(function()
+        local obj = getGui()
+        for _, name in ipairs(path) do
+            obj = obj[name]
+        end
+        return tonumber((obj.Text:gsub("[^%d]", "")))
+    end)
+    return ok and res or nil
+end
+
+local function sellAndReturn()
+    if selling then return end
+    local hrp = getHRP()
+    if not hrp then return end
+    selling = true
+    local saved = hrp.CFrame
+    hrp.CFrame = SELL_POS
+    task.wait(0.1)
+    pcall(function() AreaSell:FireServer() end)
+    task.wait(0.2)
+    hrp = getHRP()
+    if hrp then hrp.CFrame = saved end
+    selling = false
+end
+
+local rainbowColor
+do
+    local rc = ChestsFolder and ChestsFolder:FindFirstChild("Rainbow Chest")
+    local part = rc and rc:FindFirstChildWhichIsA("BasePart")
+    rainbowColor = part and part.BrickColor.Color
+end
+
+local function isChest(block)
+    return block:FindFirstChild("Chest") ~= nil or block:FindFirstChild("BasicChest") ~= nil
+end
+
+local function chestNames(block)
+    local names = {block.Name:lower()}
+    for _, key in ipairs({"Chest", "BasicChest", "Mat"}) do
+        local child = block:FindFirstChild(key)
+        if child then
+            table.insert(names, child.Name:lower())
+            if child:IsA("ValueBase") and type(child.Value) == "string" then
+                table.insert(names, child.Value:lower())
+            end
+        end
+    end
+    return names
+end
+
+local function isExcluded(block)
+    if rainbowColor and excludedChests["Rainbow Chest"] and block.BrickColor.Color == rainbowColor then
+        return true
+    end
+    local names = chestNames(block)
+    for chestName, excluded in pairs(excludedChests) do
+        if excluded then
+            local needle = chestName:lower()
+            for _, n in ipairs(names) do
+                if string.find(n, needle, 1, true) then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+local function inArea(block)
+    local p = block.Position
+    return p.X > AREA.minX and p.X < AREA.maxX and p.Z > AREA.minZ and p.Z < AREA.maxZ
+end
+
+local function findTarget()
+    local hrp = getHRP()
+    local origin = hrp and hrp.Position or Vector3.zero
+    local best, bestDist = nil, math.huge
+    local now = tick()
+    for _, block in ipairs(SandBlocks:GetChildren()) do
+        if block:IsA("BasePart") and isChest(block) then
+            local bl = blacklist[block]
+            if not (bl and now < bl) and not isExcluded(block) and (not State.limitArea or inArea(block)) then
+                local d = (block.Position - origin).Magnitude
+                if d < bestDist then
+                    best, bestDist = block, d
+                end
+            end
+        end
+    end
+    return best
+end
+
+local function fireDig(tool, block)
+    local remote = tool and tool:FindFirstChild("RemoteClick")
+    if remote and block and block.Parent then
+        pcall(function() remote:FireServer(block) end)
+        return true
+    end
+    return false
+end
+
+local function digChest(block)
+    local startTime = tick()
+    block.CanCollide = false
+    while State.autoFarm and block.Parent and tick() - startTime < State.digTimeout do
+        if State.autoSell and backpackFull() then
+            sellAndReturn()
+        end
+        local hrp = getHRP()
+        if not hrp then break end
+        hrp.CFrame = block.CFrame
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        local tool = getTool()
+        if tool then
+            fireDig(tool, block)
+        end
+        task.wait(State.digDelay)
+    end
+    if not block.Parent then
+        State.chestsFarmed += 1
+        return true
+    end
+    blacklist[block] = tick() + 15
+    return false
+end
+
+task.spawn(function()
+    while true do
+        if State.autoFarm then
+            State.status = "Searching for chests..."
+            local target = findTarget()
+            if target then
+                State.status = "Farming chest"
+                digChest(target)
+            else
+                State.status = "No chests found"
+                task.wait(0.5)
+            end
+            task.wait()
+        else
+            task.wait(0.3)
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if State.autoDig and not State.autoFarm then
+            local tool = getTool()
+            local cfg = tool and tool:FindFirstChild("Configurations")
+            local hrp = getHRP()
+            if cfg and hrp and cfg:FindFirstChild("ToolType") and cfg.ToolType.Value ~= "Bomb" then
+                local range = cfg.DigRange.Value
+                local best, bestDist = nil, range
+                for _, b in ipairs(SandBlocks:GetChildren()) do
+                    if b:IsA("BasePart") and b:FindFirstChild("Health") and not b:FindFirstChild("Rock") then
+                        local d = (b.Position - hrp.Position).Magnitude
+                        if d <= bestDist then
+                            best, bestDist = b, d
+                        end
+                    end
+                end
+                if best then
+                    fireDig(tool, best)
+                end
+                local delay = cfg.AttackLength.Value
+                if quickDig then delay = delay / 2 end
+                task.wait(delay + 0.05)
+            else
+                task.wait(0.5)
+            end
+        else
+            task.wait(0.3)
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if State.autoSell and not State.autoFarm and backpackFull() then
+            sellAndReturn()
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if State.autoRebirth then
+            local coins = readNumber({"Buttons", "Coins", "Amount"})
+            local needed = readNumber({"Rebirth", "Needed", "Coins", "Amount"})
+            if coins and needed and coins >= needed then
+                pcall(function() RebirthEvent:FireServer() end)
+                local t = tick()
+                repeat
+                    task.wait(0.1)
+                    local ok, vis = pcall(function() return getGui().Popups.GiveReward.Visible end)
+                until (ok and vis) or tick() - t > 3
+                pcall(function() getGui().Popups.GiveReward.Visible = false end)
+                notify("Auto Rebirth", "Rebirth successful")
+                task.wait(1)
+            end
+        end
+    end
+end)
+
+LocalPlayer.Idled:Connect(function()
+    if State.antiAfk then
+        pcall(function()
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new())
+        end)
+    end
+end)
+
+local shovelOptions = {}
+for _, s in ipairs(Shovels:GetChildren()) do
+    table.insert(shovelOptions, s.Name)
+end
+table.sort(shovelOptions)
+
+do
+    local char = LocalPlayer.Character
+    local tool = char and char:FindFirstChildOfClass("Tool")
+    if tool and table.find(shovelOptions, tool.Name) then
+        State.selectedShovel = tool.Name
+    else
+        State.selectedShovel = shovelOptions[1] or "None"
+    end
+end
+
+MainTab:CreateSection({Name = "Auto Farm", Description = "Automated chest farming"})
+
+local _, _, _, statusPara = MainTab:CreateParagraph({
+    Title = "Status",
+    Content = "Idle"
+})
+
+MainTab:CreateToggle({
+    Name = "Auto Farm Chest",
+    Description = "Teleports to the nearest chest and digs it",
+    CurrentValue = false,
+    Callback = function(v)
+        State.autoFarm = v
+        if not v then
+            State.status = "Idle"
+            local hrp = getHRP()
+            if hrp then hrp.CFrame = SELL_POS end
+        end
+        if uiReady then
+            notify("Auto Farm", v and "Enabled" or "Disabled")
+        end
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Auto Dig (Nearest)",
+    Description = "Digs the nearest block in range",
+    CurrentValue = false,
+    Callback = function(v)
+        State.autoDig = v
+        if uiReady then
+            notify("Auto Dig", v and "Enabled" or "Disabled")
+        end
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Auto Sell",
+    Description = "Sells automatically when the backpack is full",
+    CurrentValue = true,
+    Callback = function(v)
+        State.autoSell = v
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Auto Rebirth",
+    Description = "Rebirths when you have enough coins",
+    CurrentValue = false,
+    Callback = function(v)
+        State.autoRebirth = v
+        if uiReady then
+            notify("Auto Rebirth", v and "Enabled" or "Disabled")
+        end
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Limit Start Area",
+    Description = "Only farm chests inside the starting area",
+    CurrentValue = true,
+    Callback = function(v)
+        State.limitArea = v
+    end
+})
+
+MainTab:CreateToggle({
+    Name = "Anti AFK",
+    CurrentValue = false,
+    Callback = function(v)
+        State.antiAfk = v
+    end
+})
+
+MainTab:CreateSection({Name = "Settings"})
+
+MainTab:CreateSlider({
+    Name = "Dig Delay",
+    Range = {0.01, 0.5},
+    Increment = 0.01,
+    Suffix = " s",
+    CurrentValue = 0.05,
+    Callback = function(v)
+        State.digDelay = v
+    end
+})
+
+MainTab:CreateSlider({
+    Name = "Dig Timeout",
+    Range = {3, 30},
+    Increment = 1,
+    Suffix = " s",
+    CurrentValue = 10,
+    Callback = function(v)
+        State.digTimeout = v
+    end
+})
+
+MainTab:CreateSection({Name = "Shovel"})
+
+MainTab:CreateDropdown({
+    Name = "Select Shovel",
+    Options = shovelOptions,
+    CurrentOption = State.selectedShovel,
+    Callback = function(option)
+        if type(option) == "table" then option = option[1] end
+        if not option then return end
+        State.selectedShovel = option
+    end
+})
+
+MainTab:CreateButton({
+    Name = "Equip Selected Shovel",
+    Interact = "Equip",
+    Callback = function()
+        if EquipShovel and State.selectedShovel then
+            pcall(function() EquipShovel:FireServer(State.selectedShovel) end)
+            notify("Shovel", "Equipped: " .. State.selectedShovel)
+        end
+    end
+})
+
+MainTab:CreateButton({
+    Name = "Buy Selected Shovel",
+    Interact = "Buy",
+    Callback = function()
+        if Checkout and State.selectedShovel then
+            pcall(function() Checkout:FireServer(State.selectedShovel) end)
+            notify("Shovel", "Checkout: " .. State.selectedShovel)
+        end
+    end
+})
+
+MainTab:CreateSection({Name = "Teleport"})
+
+MainTab:CreateButton({
+    Name = "Teleport to Sell",
+    Interact = "Teleport",
+    Callback = function()
+        local hrp = getHRP()
+        if hrp then hrp.CFrame = SELL_POS end
+    end
+})
+
+MainTab:CreateButton({
+    Name = "Sell Now",
+    Interact = "Sell",
+    Callback = function()
+        task.spawn(sellAndReturn)
+    end
+})
+
+MainTab:CreateButton({
+    Name = "Rebirth Now",
+    Interact = "Rebirth",
+    Callback = function()
+        pcall(function() RebirthEvent:FireServer() end)
+    end
+})
+
+MainTab:CreateButton({
+    Name = "Reset Blacklist",
+    Interact = "Reset",
+    Callback = function()
+        blacklist = {}
+        notify("Blacklist", "Blacklist cleared")
+    end
+})
+
+local function addChestToggles(folder)
+    if not folder then return end
+    for _, chest in ipairs(folder:GetChildren()) do
+        if excludedChests[chest.Name] == nil then
+            local default = chest.Name:lower():find("rainbow") ~= nil
+            excludedChests[chest.Name] = default
+            ChestsTab:CreateToggle({
+                Name = "Skip " .. chest.Name,
+                CurrentValue = default,
+                Callback = function(v)
+                    excludedChests[chest.Name] = v
+                    if uiReady then
+                        notify("Chest Filter", chest.Name .. (v and " will be skipped" or " will be farmed"))
+                    end
+                end
+            })
+        end
+    end
+end
+
+ChestsTab:CreateSection({Name = "Exclude Chests", Description = "Enabled = skipped"})
+addChestToggles(ChestsFolder)
+addChestToggles(OldChestsFolder)
+
+local function setStatus(text)
+    pcall(function() statusPara:Set("Status", text) end)
+end
+
+task.spawn(function()
+    while true do
+        task.wait(1)
+        local coins = readNumber({"Buttons", "Coins", "Amount"}) or 0
+        setStatus(string.format(
+            "State: %s\nChests dug: %d\nCoins: %d\nQuick Dig: %s",
+            State.status,
+            State.chestsFarmed,
+            coins,
+            quickDig and "Yes" or "No"
+        ))
+    end
+end)
+
+task.delay(1, function()
+    uiReady = true
+end)
+
+notify("Treasure Hunt", "Script loaded", 3)
