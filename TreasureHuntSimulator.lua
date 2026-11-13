@@ -1,4 +1,4 @@
-local luaCxre = loadstring(game:HttpGet("https://pastebin.com/raw/i1hqRFbq"))()
+local luaCxre = loadstring(game:HttpGet("https://pastebin.com/raw/kMrXLdJd"))()
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
