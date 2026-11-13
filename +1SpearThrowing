@@ -1,0 +1,517 @@
+local Tumblr = loadstring(game:HttpGet("https://pastebin.com/raw/2BGUWvbd"))()
+
+local Window = Tumblr:Init({
+ Name = "Bulb Gookkkiiiilll",
+ Subtitle = "Just check it out",
+ FolderName = "TumblrConfigs",
+ FileName = tostring(game.GameId) .. ".json"
+})
+
+local MainTab = Window:CreateTab("Main", 4483362458)
+_G.MainTab = MainTab
+
+local RunService = game:GetService("RunService")
+local VIM = game:GetService("VirtualInputManager")
+local RS = game:GetService("ReplicatedStorage")
+local CS = game:GetService("CollectionService")
+local LP = game:GetService("Players").LocalPlayer
+
+local moduleCache = {}
+
+local function findModule(name, key)
+ local cached = moduleCache[name]
+ if cached then return cached end
+
+ if not getloadedmodules then return nil end
+
+ local list = getloadedmodules()
+
+ for _, m in ipairs(list) do
+  if m.Name == name then
+   local ok, mod = pcall(require, m)
+   if ok and type(mod) == "table" and (not key or mod[key] ~= nil) then
+    moduleCache[name] = mod
+    return mod
+   end
+  end
+ end
+
+ if key then
+  for _, m in ipairs(list) do
+   local ok, mod = pcall(require, m)
+   if ok and type(mod) == "table" and mod[key] ~= nil then
+    moduleCache[name] = mod
+    return mod
+   end
+  end
+ end
+end
+
+MainTab:CreateSection("Spear Throw")
+
+local autoToggle = MainTab:CreateToggle({
+ Name = "Auto Throw",
+ Flag = "AutoThrowToggle",
+ Description = "Uses the game's built-in auto throw (stand in a throw zone)",
+ CurrentValue = false,
+ Callback = function(v)
+  local States = findModule("States", "AutoThrow")
+  if not States then
+   Tumblr:Notify({Title = "Error", Content = "States module not found", Duration = 3})
+   return
+  end
+  States.AutoThrow(v)
+ end
+})
+
+MainTab:CreateButton({
+ Name = "Open Throw Meter",
+ Interact = "Throw",
+ Callback = function()
+  local Throwing = findModule("Throwing", "ToggleAutoThrow")
+  if not Throwing or type(Throwing.Throw) ~= "function" then
+   Tumblr:Notify({Title = "Error", Content = "Throwing module not found", Duration = 3})
+   return
+  end
+  Throwing.Throw()
+ end
+})
+
+task.spawn(function()
+ while task.wait(0.5) do
+  local States = moduleCache["States"]
+  if States then
+   local ok, actual = pcall(States.AutoThrow)
+   if ok and autoToggle.State() ~= actual then
+    autoToggle.Set(actual)
+   end
+  end
+ end
+end)
+
+local autoPerfect = false
+local perfectThreshold = 0.97
+
+MainTab:CreateSlider({
+ Name = "Perfect Threshold",
+ Range = {0.9, 0.995},
+ Increment = 0.005,
+ Flag = "PerfectThreshold",
+ CurrentValue = 0.97,
+ Description = "0.95+ = Perfect, 0.98+ = Thunderbolt",
+ Callback = function(v) perfectThreshold = v end
+})
+
+MainTab:CreateToggle({
+ Name = "Auto Perfect",
+ Flag = "AutoPerfectToggle",
+ Description = "Opens the meter and clicks at peak power (turn off Auto Throw)",
+ CurrentValue = false,
+ Callback = function(v) autoPerfect = v end
+})
+
+local function clickScreen()
+ local vp = workspace.CurrentCamera.ViewportSize
+ local x, y = vp.X / 2, vp.Y / 2
+ VIM:SendMouseButtonEvent(x, y, 0, true, game, 1)
+ task.wait(0.02)
+ VIM:SendMouseButtonEvent(x, y, 0, false, game, 1)
+end
+
+local busy = false
+local lastSearch = 0
+
+RunService.Heartbeat:Connect(function()
+ if not autoPerfect or busy then return end
+
+ local States = moduleCache["States"]
+ if not States then
+  if tick() - lastSearch < 2 then return end
+  lastSearch = tick()
+  States = findModule("States", "AutoThrow")
+  if not States then return end
+ end
+
+ local meter = States.ThrowMeter()
+
+ if meter == nil then
+  if States.InThrowZone() and not States.IsThrowing() and not States.AutoThrow() then
+   local Throwing = findModule("Throwing", "ToggleAutoThrow")
+   if Throwing then pcall(Throwing.Throw) end
+  end
+ elseif meter == "Aiming" and States.ThrowPower() >= perfectThreshold then
+  busy = true
+  task.spawn(function()
+   clickScreen()
+   task.wait(0.3)
+   busy = false
+  end)
+ end
+end)
+
+MainTab:CreateSection("Rebirth Setting")
+local autoRebirthToggle = MainTab:CreateToggle({
+ Name = "Auto Rebirth",
+ Flag = "AutoRebirthToggle",
+ Description = "Rebirths automatically when Level reaches Max Level",
+ CurrentValue = false,
+ Callback = function(v)
+  local States = findModule("States", "AutoThrow")
+  if not States then
+   Tumblr:Notify({Title = "Error", Content = "States module not found", Duration = 3})
+   return
+  end
+  States.AutoRebirth(v)
+ end
+})
+
+task.spawn(function()
+ while task.wait(0.5) do
+  local States = moduleCache["States"]
+  if States then
+   local ok, actual = pcall(States.AutoRebirth)
+   if ok and autoRebirthToggle.State() ~= actual then
+    autoRebirthToggle.Set(actual)
+   end
+  end
+ end
+end)
+
+local padsByZone = {}
+local zoneNames = {}
+for _, d in ipairs(workspace:GetDescendants()) do
+ if d:IsA("BasePart") then
+  local zone = d:GetAttribute("TrainingZone")
+  if zone and d.Parent and d.Parent:FindFirstChild("Target") then
+   if not padsByZone[zone] then
+    padsByZone[zone] = {}
+    table.insert(zoneNames, zone)
+   end
+   table.insert(padsByZone[zone], d)
+  end
+ end
+end
+table.sort(zoneNames)
+if #zoneNames == 0 then zoneNames = {"None"} end
+
+local selectedZone = zoneNames[1]
+local autoTrain = false
+local lastTry = 0
+
+local function nearestPad(zone)
+ local list = padsByZone[zone]
+ local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+ if not list or not hrp then return nil end
+ local best, bestDist = nil, math.huge
+ for _, pad in ipairs(list) do
+  if pad.Parent then
+   local dist = (pad.Position - hrp.Position).Magnitude
+   if dist < bestDist then best, bestDist = pad, dist end
+  end
+ end
+ return best, bestDist
+end
+
+local function canTrain(zone)
+ local ok, allowed, reason = pcall(function()
+  local GameData = require(RS.Framework.Shared.GameData).Client
+  local Zones = require(RS.Framework.Tables.TrainingZones).TrainingZones
+  local Events = require(RS.Framework.Tables.AdminEvents)
+  local z = Zones[zone]
+  if not z then return false, "Unknown zone" end
+  if z.Pass and not (GameData.Owns(z.Pass)
+   or Events.FreesPass(GameData.ServerStore.AdminEvents.Get(), z.Pass)) then
+   return false, "You don't own the " .. tostring(z.Pass) .. " pass"
+  end
+  if GameData.Rebirths.Get() < (z.RequiredRebirths or 0) then
+   return false, "Requires " .. tostring(z.RequiredRebirths) .. " rebirths"
+  end
+  return true
+ end)
+ if not ok then return false, "Failed to check zone requirements" end
+ return allowed, reason
+end
+
+local function trainOnce()
+ local States = findModule("States", "AutoThrow")
+ local Training = findModule("Training", "GetPadInfo")
+ if not (States and Training) then
+  Tumblr:Notify({Title = "Error", Content = "Training/States module not found", Duration = 3})
+  return false
+ end
+ if States.IsTraining() then return true end
+
+ local pad, dist = nearestPad(selectedZone)
+ if not pad then
+  Tumblr:Notify({Title = "Error", Content = "Zone pad not found", Duration = 3})
+  return false
+ end
+
+ local allowed, reason = canTrain(selectedZone)
+ if not allowed then
+  Tumblr:Notify({Title = "Unavailable", Content = reason or "Zone is locked", Duration = 3})
+  return false
+ end
+
+ local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+ if hrp and dist and dist > 30 then
+  hrp.CFrame = CFrame.new(pad.Position + Vector3.new(0, 4, 0))
+  task.wait(0.3)
+ end
+
+ States.TrainPad(pad)
+ pcall(Training.Train, pad)
+ return true
+end
+
+MainTab:CreateSection("Training")
+
+MainTab:CreateDropdown({
+ Name = "Training Zone",
+ Options = zoneNames,
+ CurrentOption = selectedZone,
+ Callback = function(opt) selectedZone = opt end
+})
+
+MainTab:CreateButton({
+ Name = "Train Now",
+ Interact = "Train",
+ Callback = function() trainOnce() end
+})
+
+MainTab:CreateButton({
+ Name = "Stop Training",
+ Interact = "Stop",
+ Callback = function()
+  pcall(function()
+   require(RS.Framework.Shared.Remotes).StopTraining.send()
+  end)
+ end
+})
+
+MainTab:CreateToggle({
+ Name = "Auto Train",
+ Flag = "AutoTrainToggle",
+ Description = "Trains automatically in the selected zone (jumping stops it)",
+ CurrentValue = false,
+ Callback = function(v) autoTrain = v end
+})
+
+task.spawn(function()
+ while task.wait(1) do
+  if autoTrain and tick() - lastTry > 4 then
+   local States = moduleCache["States"] or findModule("States", "AutoThrow")
+   if States and not States.IsTraining() then
+    lastTry = tick()
+    trainOnce()
+   end
+  end
+ end
+end)
+
+MainTab:CreateSection("Pets")
+
+local function sendRemote(name)
+ local ok, err = pcall(function()
+  require(RS.Framework.Shared.Remotes)[name].send()
+ end)
+ if not ok then
+  Tumblr:Notify({Title = "Error", Content = tostring(err), Duration = 3})
+ end
+end
+
+MainTab:CreateButton({
+ Name = "Equip Best Pets",
+ Interact = "Equip",
+ Callback = function() sendRemote("EquipBestPets") end
+})
+
+MainTab:CreateButton({
+ Name = "Unequip All Pets",
+ Interact = "Unequip",
+ Callback = function() sendRemote("UnequipAllPets") end
+})
+
+local function fmtNum(n)
+ local units = {{1e12, "T"}, {1e9, "B"}, {1e6, "M"}, {1e3, "K"}}
+ for _, u in ipairs(units) do
+  if n >= u[1] then return string.format("%.4g%s", n / u[1], u[2]) end
+ end
+ return tostring(n)
+end
+
+local function eggStands()
+ local byName, names = {}, {}
+ local okEggs, EggsTable = pcall(function()
+  return require(RS.Framework.Tables.Eggs).Eggs
+ end)
+ if not okEggs then EggsTable = {} end
+
+ for _, stand in ipairs(CS:GetTagged("Egg")) do
+  local name = stand:GetAttribute("Egg")
+  local data = EggsTable[name]
+  if name and stand:IsA("BasePart") and not (data and data.Product) then
+   if not byName[name] then
+    byName[name] = {}
+    table.insert(names, name)
+   end
+   table.insert(byName[name], stand)
+  end
+ end
+
+ table.sort(names, function(a, b)
+  local oa = EggsTable[a] and EggsTable[a].Order or 99
+  local ob = EggsTable[b] and EggsTable[b].Order or 99
+  return oa < ob
+ end)
+ return byName, names, EggsTable
+end
+
+local _, eggNames, eggData = eggStands()
+local labelToKey, labels = {}, {}
+for _, key in ipairs(eggNames) do
+ local d = eggData[key]
+ local label = d and (d.DisplayName .. " (" .. fmtNum(d.Price) .. ")") or key
+ labelToKey[label] = key
+ table.insert(labels, label)
+end
+if #labels == 0 then labels = {"None"} end
+
+local selectedEgg = labelToKey[labels[1]]
+local hatchStarting = false
+local autoHatchToggle
+
+MainTab:CreateSection("Eggs")
+
+MainTab:CreateDropdown({
+ Name = "Egg",
+ Options = labels,
+ CurrentOption = labels[1],
+ Callback = function(opt) selectedEgg = labelToKey[opt] end
+})
+
+autoHatchToggle = MainTab:CreateToggle({
+ Name = "Auto Hatch",
+ Description = "Hatches eggs automatically (needs enough Wins and pet slots)",
+ CurrentValue = false,
+ Callback = function(v)
+  local States = findModule("States", "AutoThrow")
+  local Eggs = findModule("Eggs", "ToggleAuto")
+  if not (States and Eggs) then
+   Tumblr:Notify({Title = "Error", Content = "Eggs/States module not found", Duration = 3})
+   return
+  end
+
+  if not v then
+   States.AutoHatch(false)
+   return
+  end
+
+  task.spawn(function()
+   hatchStarting = true
+
+   local byName = eggStands()
+   local list = byName[selectedEgg]
+   local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+   local stand, best = nil, math.huge
+   if list and hrp then
+    for _, s in ipairs(list) do
+     local d = (s.Position - hrp.Position).Magnitude
+     if d < best then stand, best = s, d end
+    end
+   end
+
+   if not stand then
+    Tumblr:Notify({Title = "Error", Content = "Egg stand not found", Duration = 3})
+    hatchStarting = false
+    autoHatchToggle.Set(false)
+    return
+   end
+
+   if best > 8 then
+    hrp.CFrame = CFrame.new(stand.Position + Vector3.new(0, 4, 0))
+   end
+
+   local t = tick()
+   while not States.NearEgg() and tick() - t < 3 do task.wait(0.1) end
+
+   if States.NearEgg() and not States.AutoHatch() then
+    pcall(Eggs.ToggleAuto)
+   end
+
+   task.wait(0.3)
+   hatchStarting = false
+   if not States.AutoHatch() then
+    Tumblr:Notify({Title = "Failed", Content = "Auto Hatch did not start (check Wins and pet slots)", Duration = 3})
+    autoHatchToggle.Set(false)
+   end
+  end)
+ end
+})
+
+task.spawn(function()
+ while task.wait(0.5) do
+  local States = moduleCache["States"]
+  if States and not hatchStarting and autoHatchToggle.State() then
+   local ok, actual = pcall(States.AutoHatch)
+   if ok and not actual then
+    autoHatchToggle.Set(false)
+   end
+  end
+ end
+end)
+
+MainTab:CreateSection("Spear")
+
+local function ownedSpears()
+ local ok, list = pcall(function()
+  local GameData = require(RS.Framework.Shared.GameData).Client
+  local names = {}
+  for name, owned in pairs(GameData.Spears.Get()) do
+   if owned == true then table.insert(names, name) end
+  end
+  table.sort(names)
+  return names
+ end)
+ if ok and #list > 0 then return list end
+ return {"None"}
+end
+
+local spearOptions = ownedSpears()
+local selectedSpear = spearOptions[1]
+
+local spearDropdown = MainTab:CreateDropdown({
+ Name = "Owned Spear",
+ Options = spearOptions,
+ CurrentOption = selectedSpear,
+ Callback = function(opt) selectedSpear = opt end
+})
+
+MainTab:CreateButton({
+ Name = "Equip Spear",
+ Interact = "Equip",
+ Callback = function()
+  if not selectedSpear or selectedSpear == "None" then
+   Tumblr:Notify({Title = "Error", Content = "No spear selected", Duration = 3})
+   return
+  end
+  local ok, err = pcall(function()
+   require(RS.Framework.Shared.Remotes).SelectSpear.send(selectedSpear)
+  end)
+  Tumblr:Notify({
+   Title = ok and "Spear" or "Error",
+   Content = ok and ("Equipped " .. selectedSpear) or tostring(err),
+   Duration = 2
+  })
+ end
+})
+
+MainTab:CreateButton({
+ Name = "Refresh Spear List",
+ Interact = "Refresh",
+ Callback = function()
+  local opts = ownedSpears()
+  spearDropdown:Refresh(opts, false)
+  selectedSpear = opts[1]
+ end
+})
