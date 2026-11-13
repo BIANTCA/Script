@@ -1,4 +1,4 @@
-local luaCxre = loadstring(game:HttpGet("https://pastebin.com/raw/kMrXLdJd"))()
+local JendralHans = loadstring(game:HttpGet("https://pastebin.com/raw/kMrXLdJd"))()
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -9,10 +9,10 @@ local Workspace = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
 
-local Window = luaCxre:Init({
+local Window = JendralHans:Init({
     Name = "Treasure Hunt Simulator",
-    Subtitle = "By luaCxre",
-    FolderName = "luaCxreConfigs",
+    Subtitle = "By JendralHans",
+    FolderName = "JendralHansConfigs",
     FileName = "TreasureHunt.json",
     LoadedNotification = false
 })
@@ -57,7 +57,7 @@ local uiReady = false
 
 local function notify(title, content, duration)
     pcall(function()
-        luaCxre:Notify({Title = title, Content = content, Duration = duration or 2})
+        JendralHans:Notify({Title = title, Content = content, Duration = duration or 2})
     end)
 end
 
