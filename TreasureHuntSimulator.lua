@@ -267,13 +267,13 @@ end
 task.spawn(function()
     while true do
         if State.autoFarm then
-            State.status = "Mencari chest..."
+            State.status = "Searching for chests..."
             local target = findTarget()
             if target then
                 State.status = "Farming chest"
                 digChest(target)
             else
-                State.status = "Tidak ada chest"
+                State.status = "No chests found"
                 task.wait(0.5)
             end
             task.wait()
@@ -338,7 +338,7 @@ task.spawn(function()
                     local ok, vis = pcall(function() return getGui().Popups.GiveReward.Visible end)
                 until (ok and vis) or tick() - t > 3
                 pcall(function() getGui().Popups.GiveReward.Visible = false end)
-                notify("Auto Rebirth", "Rebirth berhasil")
+                notify("Auto Rebirth", "Rebirth successful")
                 task.wait(1)
             end
         end
@@ -354,7 +354,6 @@ LocalPlayer.Idled:Connect(function()
     end
 end)
 
--- Always use selected shovel
 local function equippedShovelName()
     local char = LocalPlayer.Character
     local tool = char and char:FindFirstChildOfClass("Tool")
@@ -391,7 +390,6 @@ task.spawn(function()
     end
 end)
 
--- Crates
 local function crateCost(crate)
     if crate:FindFirstChild("CoinsCost") then
         return "coins", crate.CoinsCost.Value
@@ -498,7 +496,7 @@ local _, _, _, statusCtrl = MainTab:CreateParagraph({
 
 MainTab:CreateToggle({
     Name = "Auto Farm Chest",
-    Description = "Teleport ke chest terdekat lalu gali otomatis",
+    Description = "Teleport to the nearest chest and dig it automatically",
     Flag = "THS_AutoFarm",
     CurrentValue = false,
     Callback = function(v)
@@ -513,8 +511,8 @@ MainTab:CreateToggle({
 })
 
 MainTab:CreateToggle({
-    Name = "Auto Dig (Terdekat)",
-    Description = "Gali blok dalam jangkauan tool tanpa teleport",
+    Name = "Auto Dig (Nearest)",
+    Description = "Dig the nearest block in tool range without teleporting",
     Flag = "THS_AutoDig",
     CurrentValue = false,
     Callback = function(v)
@@ -525,7 +523,7 @@ MainTab:CreateToggle({
 
 MainTab:CreateToggle({
     Name = "Auto Sell",
-    Description = "Jual otomatis saat backpack penuh",
+    Description = "Sell automatically when the backpack is full",
     Flag = "THS_AutoSell",
     CurrentValue = true,
     Callback = function(v)
@@ -535,7 +533,7 @@ MainTab:CreateToggle({
 
 MainTab:CreateToggle({
     Name = "Auto Rebirth",
-    Description = "Rebirth otomatis saat koin cukup",
+    Description = "Rebirth automatically when you have enough coins",
     Flag = "THS_AutoRebirth",
     CurrentValue = false,
     Callback = function(v)
@@ -546,7 +544,7 @@ MainTab:CreateToggle({
 
 MainTab:CreateToggle({
     Name = "Limit Start Area",
-    Description = "Hanya farm chest di area awal",
+    Description = "Only farm chests in the starting area",
     Flag = "THS_LimitArea",
     CurrentValue = true,
     Callback = function(v)
@@ -567,7 +565,7 @@ MainTab:CreateSection("Settings")
 
 MainTab:CreateSlider({
     Name = "Dig Delay",
-    Description = "Jeda antar serangan saat farm",
+    Description = "Delay between attacks while farming",
     Range = {0.01, 0.5},
     Increment = 0.01,
     Suffix = " s",
@@ -580,7 +578,7 @@ MainTab:CreateSlider({
 
 MainTab:CreateSlider({
     Name = "Dig Timeout",
-    Description = "Lewati chest jika tidak hancur dalam waktu ini",
+    Description = "Skip a chest if it is not destroyed within this time",
     Range = {3, 30},
     Increment = 1,
     Suffix = " s",
@@ -617,12 +615,12 @@ end
 
 MainTab:CreateToggle({
     Name = "Always Use This Shovel",
-    Description = "Cek tiap 2 detik: equip jika punya, beli jika koin cukup",
+    Description = "Checks every 2s: equips it if owned, buys it if you have enough coins",
     Flag = "THS_AlwaysShovel",
     CurrentValue = false,
     Callback = function(v)
         State.alwaysShovel = v
-        notify("Always Shovel", v and ("ON: " .. tostring(State.selectedShovel)) or "OFF")
+        notify("Always Use Shovel", v and ("ON: " .. tostring(State.selectedShovel)) or "OFF")
     end
 })
 
@@ -680,12 +678,12 @@ MainTab:CreateButton({
     Interact = "Reset",
     Callback = function()
         blacklist = {}
-        notify("Blacklist", "Direset")
+        notify("Blacklist", "Cleared")
     end
 })
 
 -- Crates tab
-CratesTab:CreateSection({Name = "Auto Buy Crate", Description = "Beli crate otomatis jika mata uang cukup"})
+CratesTab:CreateSection({Name = "Auto Buy Crate", Description = "Buy crates automatically when you have enough currency"})
 
 local buyDropdown = CratesTab:CreateDropdown({
     Name = "Crate to Buy",
@@ -741,7 +739,7 @@ CratesTab:CreateButton({
     end
 })
 
-CratesTab:CreateSection({Name = "Auto Open Crate", Description = "Buka crate yang dimiliki di inventory"})
+CratesTab:CreateSection({Name = "Auto Open Crate", Description = "Open the crates you own in your inventory"})
 
 local openDropdown = CratesTab:CreateDropdown({
     Name = "Crate to Open",
@@ -763,7 +761,7 @@ end
 
 CratesTab:CreateSlider({
     Name = "Open Delay",
-    Description = "Jeda antar buka crate (animasi spinner ~9 detik)",
+    Description = "Delay between openings (spinner animation is ~9 seconds)",
     Range = {1, 15},
     Increment = 1,
     Suffix = " s",
@@ -818,7 +816,7 @@ local function addChestToggles(folder)
     end
 end
 
-ChestsTab:CreateSection({Name = "Exclude Chests", Description = "ON = chest dilewati saat Auto Farm"})
+ChestsTab:CreateSection({Name = "Exclude Chests", Description = "ON = chest is skipped during Auto Farm"})
 addChestToggles(ChestsFolder)
 addChestToggles(OldChestsFolder)
 
@@ -827,13 +825,13 @@ task.spawn(function()
         task.wait(1)
         local coins = readNumber({"Buttons", "Coins", "Amount"}) or 0
         local text = string.format(
-            "State: %s\nChest digali: %d\nCrate dibeli: %d\nCrate dibuka: %d\nKoin: %d\nQuick Dig: %s",
+            "State: %s\nChests dug: %d\nCrates bought: %d\nCrates opened: %d\nCoins: %d\nQuick Dig: %s",
             State.status,
             State.chestsFarmed,
             State.cratesBought,
             State.cratesOpened,
             coins,
-            quickDig and "Ya" or "Tidak"
+            quickDig and "Yes" or "No"
         )
         pcall(function() statusCtrl:Set(nil, text) end)
     end
