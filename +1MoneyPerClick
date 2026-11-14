@@ -1,0 +1,668 @@
+local BulbGui = loadstring(game:HttpGet("https://pastebin.com/raw/2BGUWvbd"))()
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+
+local GameConfig = require(ReplicatedStorage:WaitForChild("ReplicaShared"):WaitForChild("GameConfig"))
+local TrailData = require(ReplicatedStorage:WaitForChild("ReplicaShared"):WaitForChild("TrailData"))
+local EggsModule = require(ReplicatedStorage:WaitForChild("Infos"):WaitForChild("Eggs"))
+
+local ClickToEarnRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("ClickToEarn")
+local RebirthRemote = ReplicatedStorage:WaitForChild("RebirthRemote")
+local EvolveRemote = ReplicatedStorage:WaitForChild("EvolveRemote")
+local SpeedTrailRemote = ReplicatedStorage:WaitForChild("SpeedTrailRemote")
+local CanOpenEggRemote = ReplicatedStorage:WaitForChild("Events"):WaitForChild("CanOpenEgg")
+
+local function findRemote(names)
+    local folders = {
+        ReplicatedStorage,
+        ReplicatedStorage:FindFirstChild("Events"),
+        ReplicatedStorage:FindFirstChild("Remotes"),
+    }
+    for _, folder in ipairs(folders) do
+        if folder then
+            for _, n in ipairs(names) do
+                local r = folder:FindFirstChild(n)
+                if r and (r:IsA("RemoteEvent") or r:IsA("RemoteFunction")) then
+                    return r
+                end
+            end
+        end
+    end
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            local ln = obj.Name:lower()
+            if ln:find("egg") and (ln:find("open") or ln:find("buy") or ln:find("hatch")) and not ln:find("can") and not ln:find("robux") then
+                return obj
+            end
+        end
+    end
+    return CanOpenEggRemote
+end
+
+local OpenEggRemote = findRemote({"OpenEgg", "OpenEggRemote", "BuyEgg", "BuyEggRemote", "HatchEgg", "HatchEggRemote", "EggOpen"})
+
+local function getValue(path)
+    local obj = LocalPlayer
+    for _, name in ipairs(path) do
+        obj = obj:WaitForChild(name, 5)
+        if not obj then return 0 end
+    end
+    return obj.Value or 0
+end
+
+local function getRebirths()
+    return getValue({"user", "leaderstats", "rebirth"})
+end
+
+local function getWins()
+    return getValue({"user", "currency", "win"})
+end
+
+local function getMoney()
+    return getValue({"user", "currency", "money"})
+end
+
+local function getXP()
+    return getValue({"user", "LevelData", "xp"})
+end
+
+local function getCurrentWorld()
+    return GameConfig.WorldForRebirths(getRebirths())
+end
+
+local function getNextWorldRebirths()
+    return GameConfig.WorldUnlockRebirths[getCurrentWorld() + 1]
+end
+
+local function getHRP()
+    local char = LocalPlayer.Character
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function fireTouch(hrp, part)
+    if typeof(firetouchinterest) == "function" then
+        pcall(function()
+            firetouchinterest(hrp, part, 0)
+            task.wait()
+            firetouchinterest(hrp, part, 1)
+        end)
+    end
+end
+
+-- ============================================
+-- AUTOWIN KOORDINAT TETAP
+-- ============================================
+
+local AUTOWIN_POSITION = Vector3.new(3035.6, 7.7, -6019.0)
+local AUTOWIN_OFFSET = Vector3.new(0, 3, 0)
+local AUTOWIN_INTERVAL = 1.5
+
+local savedCFrame = nil
+
+local function teleportToAutoWin()
+    local hrp = getHRP()
+    if not hrp then return false end
+    hrp.CFrame = CFrame.new(AUTOWIN_POSITION) + AUTOWIN_OFFSET
+    return true
+end
+
+local function saveOriginalPosition()
+    local hrp = getHRP()
+    if hrp then
+        savedCFrame = hrp.CFrame
+    end
+end
+
+local function restoreOriginalPosition()
+    if savedCFrame then
+        local hrp = getHRP()
+        if hrp then
+            hrp.CFrame = savedCFrame
+        end
+        savedCFrame = nil
+    end
+end
+
+-- ============================================
+-- MONEY PAD
+-- ============================================
+
+local function getHighestMoneyPad()
+    local stageFolder = Workspace:FindFirstChild("Moneypad Stage")
+    if not stageFolder then return nil, 0 end
+    local listmodel = stageFolder:FindFirstChild("listmodel") or stageFolder
+
+    local bestPart, bestNum = nil, 0
+    for _, child in ipairs(listmodel:GetChildren()) do
+        local num = tonumber(child.Name:match("MoneyPad(%d+)"))
+        if num and num > bestNum then
+            local part = child:IsA("BasePart") and child or child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart", true)
+            if part then bestPart, bestNum = part, num end
+        end
+    end
+    return bestPart, bestNum
+end
+
+local function teleportToHighestMoneyPad()
+    local part, num = getHighestMoneyPad()
+    if not part then return false, 0 end
+
+    local hrp = getHRP()
+    if not hrp then return false, num end
+
+    hrp.CFrame = part.CFrame + Vector3.new(0, 5, 0)
+    fireTouch(hrp, part)
+    return true, num
+end
+
+-- ============================================
+-- TRAIL & EGG
+-- ============================================
+
+local function getSortedTrails()
+    local sorted = {}
+    for id, data in pairs(TrailData.Trails) do
+        local numId = tonumber(id)
+        if numId then table.insert(sorted, {id = numId, data = data}) end
+    end
+    table.sort(sorted, function(a, b) return a.id < b.id end)
+    return sorted
+end
+
+local function isTrailBuyable(data)
+    if data.RobuxOnly or data.RequiredPrestige then return false end
+    if not data.WinsPrice or data.WinsPrice <= 0 then return false end
+    return true
+end
+
+local function getNextBuyableTrail()
+    local wins = getWins()
+    for _, trail in ipairs(getSortedTrails()) do
+        if isTrailBuyable(trail.data) and wins >= trail.data.WinsPrice then
+            return trail.id, trail.data
+        end
+    end
+    return nil, nil
+end
+
+local function getSortedEggs()
+    local sorted = {}
+    for name, data in pairs(EggsModule) do
+        if type(data) == "table" then
+            table.insert(sorted, {name = name, data = data})
+        end
+    end
+    table.sort(sorted, function(a, b)
+        return (a.data.EggCost or 0) < (b.data.EggCost or 0)
+    end)
+    return sorted
+end
+
+local function formatEggDetails(eggName)
+    local data = EggsModule[eggName]
+    if not data then return "Egg not found" end
+
+    local lines = {}
+    table.insert(lines, "Egg: " .. eggName)
+    table.insert(lines, "Rarity: " .. tostring(data.Rarity or "Unknown"))
+
+    if data.RobuxEgg then
+        table.insert(lines, "Price: " .. tostring(data.RobuxPrice or "?") .. " Robux [ROBUX ONLY]")
+    else
+        local cost = data.EggCost or 0
+        table.insert(lines, "Price: " .. GameConfig.AbbreviateNumber(cost) .. " Wins")
+        -- Hanya indikator visual, tidak memblokir pembelian
+        table.insert(lines, "Visual Check: " .. (getWins() >= cost and "✅ Affordable" or "❌ Not Affordable (Force Buy Active)"))
+    end
+
+    table.insert(lines, "")
+    table.insert(lines, "Drop Chances:")
+    if data.RarityChances then
+        for rarity, chance in pairs(data.RarityChances) do
+            table.insert(lines, "  - " .. rarity .. ": " .. string.format("%.2f", chance * 100) .. "%")
+        end
+    end
+
+    table.insert(lines, "")
+    table.insert(lines, "Pets:")
+    if data.PetRaritys then
+        for rarity, pets in pairs(data.PetRaritys) do
+            table.insert(lines, "  [" .. rarity .. "]")
+            for _, petInfo in ipairs(pets) do
+                table.insert(lines, "    - " .. tostring(petInfo[1]) .. " (Power: " .. GameConfig.AbbreviateNumber(petInfo[2] or 0) .. ")")
+            end
+        end
+    end
+
+    return table.concat(lines, "\n")
+end
+
+-- PEMBELIAN PAKSA: Pengecekan uang dihapus, biarkan server yang memvalidasi
+local function tryOpenEgg(eggName, amount)
+    local data = EggsModule[eggName]
+    if not data then return false, "Egg data not found" end
+    if data.RobuxEgg then return false, "Robux-only egg" end
+
+    local openRemote = OpenEggRemote or CanOpenEggRemote
+    if not openRemote then return false, "Remote not found" end
+
+    local sent, err = pcall(function()
+        if openRemote:IsA("RemoteFunction") then
+            return openRemote:InvokeServer(eggName, amount)
+        end
+        openRemote:FireServer(eggName, amount)
+        return true, "Request Sent"
+    end)
+
+    if not sent then return false, tostring(err) end
+    return true, "Processed by Server"
+end
+
+-- ============================================
+-- GUI INITIALIZATION
+-- ============================================
+
+local Window = BulbGui:Init({
+    Name = "Bulb Automation",
+    Subtitle = "Smart Farming Hub",
+    FolderName = "BulbConfigs",
+    FileName = tostring(game.GameId) .. ".json"
+})
+
+-- ============================================
+-- TAB: INFO
+-- ============================================
+
+local InfoTab = Window:CreateTab("Info", 4483362458)
+InfoTab:CreateSection({Name = "Player Stats", Description = "Real-time data", Expanded = true})
+
+local _, _, _, infoController = InfoTab:CreateParagraph({
+    Title = "Status",
+    Content = "Loading..."
+})
+
+task.spawn(function()
+    while true do
+        local rebirths = getRebirths()
+        local currentWorld = getCurrentWorld()
+        local nextWorldRebirths = getNextWorldRebirths()
+        local _, padNum = getHighestMoneyPad()
+        local _, nextTrailData = getNextBuyableTrail()
+
+        local content = string.format(
+            "Rebirth: %s\nWins: %s\nMoney: %s\nXP: %s\n\nWorld: %d\nMultiplier: x%s\n\nAutoWin Target: X %.1f Y %.1f Z %.1f\nHighest MoneyPad: %s\nNext Trail: %s",
+            GameConfig.AbbreviateNumber(rebirths),
+            GameConfig.AbbreviateNumber(getWins()),
+            GameConfig.AbbreviateNumber(getMoney()),
+            GameConfig.AbbreviateNumber(getXP()),
+            currentWorld,
+            GameConfig.RebirthMultiplierText(rebirths),
+            AUTOWIN_POSITION.X, AUTOWIN_POSITION.Y, AUTOWIN_POSITION.Z,
+            padNum > 0 and ("Stage " .. padNum) or "Not Found",
+            nextTrailData and (nextTrailData.Name .. " (" .. GameConfig.AbbreviateNumber(nextTrailData.WinsPrice) .. " Wins)") or "None Affordable"
+        )
+
+        if nextWorldRebirths then
+            content = content .. string.format("\n\nWorld %d Unlock: %d rebirths\nRemaining: %d",
+                currentWorld + 1, nextWorldRebirths, math.max(0, nextWorldRebirths - rebirths))
+        else
+            content = content .. "\n\nAll Worlds Unlocked!"
+        end
+
+        infoController:SetContent(content)
+        task.wait(1)
+    end
+end)
+
+-- ============================================
+-- TAB: MAIN FARMING
+-- ============================================
+
+local MainTab = Window:CreateTab("Main Farming", 4483362458)
+MainTab:CreateSection({Name = "Click & Rebirth", Description = "Basic automation"})
+
+local clickRunId = 0
+MainTab:CreateToggle({
+    Name = "Spam ClickToEarn",
+    CurrentValue = false,
+    Flag = "SpamClickToEarn",
+    Callback = function(state)
+        clickRunId = clickRunId + 1
+        local myId = clickRunId
+        if state then
+            task.spawn(function()
+                while clickRunId == myId do
+                    pcall(function() ClickToEarnRemote:FireServer() end)
+                    task.wait(0.1)
+                end
+            end)
+        end
+    end,
+})
+
+-- DIUBAH: Auto Rebirth tanpa pengecekan XP dan tanpa notifikasi
+local rebirthRunId = 0
+MainTab:CreateToggle({
+    Name = "Auto Rebirth",
+    CurrentValue = false,
+    Flag = "AutoRebirth",
+    Description = "Continuous rebirth attempt (Server decides)",
+    Callback = function(state)
+        rebirthRunId = rebirthRunId + 1
+        local myId = rebirthRunId
+        if state then
+            task.spawn(function()
+                while rebirthRunId == myId do
+                    pcall(function() RebirthRemote:FireServer() end)
+                    task.wait(0.5) -- Jeda sangat kecil agar tetap "setiap saat" tapi tidak langsung di-kick network
+                end
+            end)
+        end
+    end,
+})
+
+MainTab:CreateSection({Name = "Evolution", Description = "Character tier upgrade"})
+
+local evolveRunId = 0
+MainTab:CreateToggle({
+    Name = "Auto Evolve",
+    CurrentValue = false,
+    Flag = "AutoEvolve",
+    Callback = function(state)
+        evolveRunId = evolveRunId + 1
+        local myId = evolveRunId
+        if state then
+            task.spawn(function()
+                while evolveRunId == myId do
+                    pcall(function() EvolveRemote:FireServer() end)
+                    task.wait(1.5)
+                end
+            end)
+        end
+    end,
+})
+
+-- ============================================
+-- TAB: AUTOWIN & SHOP
+-- ============================================
+
+local AutoWinTab = Window:CreateTab("AutoWin & Shop", 4483362458)
+AutoWinTab:CreateSection({Name = "AutoWin (Teleport)", Description = "Teleport ke koordinat tetap", Expanded = true})
+
+local _, _, _, autoWinController = AutoWinTab:CreateParagraph({
+    Title = "AutoWin Status",
+    Content = "Idle"
+})
+
+local autoWinRunId = 0
+AutoWinTab:CreateToggle({
+    Name = "AutoWin (Teleport)",
+    CurrentValue = false,
+    Flag = "AutoWinTeleport",
+    Description = string.format("Teleport ke X %.1f Y %.1f Z %.1f setiap %ss", AUTOWIN_POSITION.X, AUTOWIN_POSITION.Y, AUTOWIN_POSITION.Z, AUTOWIN_INTERVAL),
+    Callback = function(state)
+        autoWinRunId = autoWinRunId + 1
+        local myId = autoWinRunId
+        if state then
+            saveOriginalPosition()
+            task.spawn(function()
+                while autoWinRunId == myId do
+                    local ok = teleportToAutoWin()
+                    if autoWinRunId ~= myId then break end
+                    if ok then
+                        autoWinController:SetContent(string.format(
+                            "Teleported ke:\nX %.1f Y %.1f Z %.1f\nInterval: %ss",
+                            AUTOWIN_POSITION.X, AUTOWIN_POSITION.Y, AUTOWIN_POSITION.Z, AUTOWIN_INTERVAL
+                        ))
+                    else
+                        autoWinController:SetContent("Character / HRP tidak ditemukan\nMenunggu respawn...")
+                    end
+                    task.wait(AUTOWIN_INTERVAL)
+                end
+            end)
+        else
+            restoreOriginalPosition()
+            autoWinController:SetContent("Idle - kembali ke posisi awal")
+        end
+    end,
+})
+
+AutoWinTab:CreateButton({
+    Name = "Teleport Once",
+    Interact = "Teleport",
+    Callback = function()
+        local hrp = getHRP()
+        if hrp and not savedCFrame then
+            savedCFrame = hrp.CFrame
+        end
+        local ok = teleportToAutoWin()
+        Window:Notify({
+            Title = ok and "Teleported" or "Failed",
+            Content = ok and string.format("X %.1f Y %.1f Z %.1f", AUTOWIN_POSITION.X, AUTOWIN_POSITION.Y, AUTOWIN_POSITION.Z) or "Character tidak ditemukan",
+            Duration = 2
+        })
+    end
+})
+
+AutoWinTab:CreateButton({
+    Name = "Return to Original",
+    Interact = "Return",
+    Callback = function()
+        if savedCFrame then
+            restoreOriginalPosition()
+            Window:Notify({Title = "Returned", Content = "Kembali ke posisi awal", Duration = 2})
+        else
+            Window:Notify({Title = "No Position", Content = "Tidak ada posisi awal tersimpan", Duration = 2})
+        end
+    end
+})
+
+-- ============================================
+-- SECTION: MONEY PAD
+-- ============================================
+
+AutoWinTab:CreateSection({Name = "MoneyPad", Description = "Teleport to highest MoneyPad"})
+
+local _, _, _, autoPadController = AutoWinTab:CreateParagraph({
+    Title = "MoneyPad Status",
+    Content = "Idle"
+})
+
+local padRunId = 0
+AutoWinTab:CreateToggle({
+    Name = "Auto MoneyPad (Teleport)",
+    CurrentValue = false,
+    Flag = "AutoMoneyPad",
+    Description = "Moneypad Stage.listmodel.MoneyPadN",
+    Callback = function(state)
+        padRunId = padRunId + 1
+        local myId = padRunId
+        if state then
+            task.spawn(function()
+                while padRunId == myId do
+                    local ok, num = teleportToHighestMoneyPad()
+                    if padRunId ~= myId then break end
+                    autoPadController:SetContent(ok and ("Teleported to MoneyPad " .. num) or "MoneyPad not found")
+                    task.wait(1.5)
+                end
+            end)
+        else
+            autoPadController:SetContent("Idle")
+        end
+    end,
+})
+
+-- ============================================
+-- SECTION: AUTO BUY TRAIL
+-- ============================================
+
+AutoWinTab:CreateSection({Name = "Auto Buy Trail", Description = "Lowest ID to highest, price checked"})
+
+local _, _, _, autoBuyController = AutoWinTab:CreateParagraph({
+    Title = "Auto Buy Status",
+    Content = "Idle"
+})
+
+local trailRunId = 0
+AutoWinTab:CreateToggle({
+    Name = "Auto Buy Trail",
+    CurrentValue = false,
+    Flag = "AutoBuyTrail",
+    Description = "Buy affordable trails from lowest ID",
+    Callback = function(state)
+        trailRunId = trailRunId + 1
+        local myId = trailRunId
+        if state then
+            task.spawn(function()
+                local sorted = getSortedTrails()
+                while trailRunId == myId do
+                    local bought = false
+                    for _, trail in ipairs(sorted) do
+                        if trailRunId ~= myId then break end
+                        local data = trail.data
+                        if isTrailBuyable(data) and getWins() >= data.WinsPrice then
+                            local ok, err = pcall(function()
+                                SpeedTrailRemote:FireServer("Buy", trail.id)
+                            end)
+                            if ok then
+                                autoBuyController:SetContent("Buying: " .. data.Name .. " (ID " .. trail.id .. ")\nPrice: " .. GameConfig.AbbreviateNumber(data.WinsPrice) .. " Wins")
+                                bought = true
+                                task.wait(1.5)
+                            else
+                                autoBuyController:SetContent("Failed: " .. tostring(err))
+                                task.wait(2)
+                            end
+                        end
+                    end
+                    if trailRunId ~= myId then break end
+                    if not bought then
+                        autoBuyController:SetContent("No affordable trails\nWins: " .. GameConfig.AbbreviateNumber(getWins()))
+                        task.wait(3)
+                    end
+                end
+            end)
+        else
+            autoBuyController:SetContent("Idle")
+        end
+    end,
+})
+
+-- ============================================
+-- TAB: EGGS & PETS
+-- ============================================
+
+local EggTab = Window:CreateTab("Eggs & Pets", 4483362458)
+EggTab:CreateSection({Name = "Egg Browser & Buy", Description = "Select egg from dropdown", Expanded = true})
+
+local eggNames = {}
+for _, egg in ipairs(getSortedEggs()) do
+    table.insert(eggNames, egg.name)
+end
+
+local selectedEggName = eggNames[1] or "Common"
+
+local _, _, _, eggDetailController = EggTab:CreateParagraph({
+    Title = "Egg Details",
+    Content = formatEggDetails(selectedEggName)
+})
+
+EggTab:CreateDropdown({
+    Name = "Select Egg",
+    Options = eggNames,
+    CurrentOption = selectedEggName,
+    Flag = "SelectedEggDropdown",
+    Description = "Details + buy target",
+    Callback = function(selected)
+        if type(selected) == "table" then selected = selected[1] end
+        selectedEggName = selected or selectedEggName
+        eggDetailController:SetContent(formatEggDetails(selectedEggName))
+    end,
+})
+
+EggTab:CreateButton({
+    Name = "Force Buy Selected Egg",
+    Interact = "Buy",
+    Description = "Send request directly (Server decides)",
+    Callback = function()
+        local ok, msg = tryOpenEgg(selectedEggName, 1)
+        Window:Notify({
+            Title = ok and "Request Sent" or "Failed",
+            Content = selectedEggName .. "\n" .. tostring(msg),
+            Duration = 3
+        })
+        eggDetailController:SetContent(formatEggDetails(selectedEggName))
+    end
+})
+
+EggTab:CreateSection({Name = "Auto Egg", Description = "Loop force buy selected egg"})
+
+local _, _, _, autoEggController = EggTab:CreateParagraph({
+    Title = "Auto Egg Status",
+    Content = "Idle"
+})
+
+local eggRunId = 0
+EggTab:CreateToggle({
+    Name = "Auto Force Buy Egg",
+    CurrentValue = false,
+    Flag = "AutoBuyEgg",
+    Description = "Spam buy attempt regardless of current wins",
+    Callback = function(state)
+        eggRunId = eggRunId + 1
+        local myId = eggRunId
+        if state then
+            task.spawn(function()
+                while eggRunId == myId do
+                    local eggName = selectedEggName
+                    local data = EggsModule[eggName]
+                    if not data or data.RobuxEgg then
+                        autoEggController:SetContent("Invalid / Robux-only egg selected")
+                        task.wait(2)
+                    else
+                        local ok, msg = tryOpenEgg(eggName, 1)
+                        if eggRunId ~= myId then break end
+                        
+                        local currentWins = GameConfig.AbbreviateNumber(getWins())
+                        local affordStatus = getWins() >= (data.EggCost or 0) and "✅ Affordable" or "❌ Not Affordable"
+
+                        autoEggController:SetContent(string.format(
+                            "Egg: %s\nServer Response: %s\nWins: %s\nCheck: %s",
+                            eggName, tostring(msg), currentWins, affordStatus
+                        ))
+                        task.wait(ok and 0.5 or 1.5)
+                    end
+                end
+            end)
+        else
+            autoEggController:SetContent("Idle")
+        end
+    end
+})
+
+-- ============================================
+-- SETTINGS
+-- ============================================
+
+Window:CreateSettingsParagraph({
+    Title = "Script Info",
+    Content = string.format(
+        "Version: 2.3 (Force Buy & Auto Rebirth)\n\n" ..
+        "AutoWin Logic:\n" ..
+        "  Teleport ke koordinat tetap setiap %ss\n" ..
+        "  X: %.1f  Y: %.1f  Z: %.1f\n" ..
+        "  Saat toggle OFF -> kembali ke posisi awal\n\n" ..
+        "Rebirth: Continuous loop (No XP check, No notify)\n" ..
+        "Eggs: Force buy enabled (Server validates)\n\n" ..
+        "XP Path: user.LevelData.xp\n" ..
+        "Open Egg Remote: " .. (OpenEggRemote and OpenEggRemote:GetFullName() or "NOT FOUND")
+    )
+})
+
+Window:Notify({
+    Title = "Setup Complete v2.3",
+    Content = #eggNames .. " eggs loaded | Force Buy & Auto Rebirth Active",
+    Duration = 3
+})
