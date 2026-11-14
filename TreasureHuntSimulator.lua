@@ -11,10 +11,9 @@ local LocalPlayer = Players.LocalPlayer
 
 local Window = JendralHans:Init({
     Name = "Treasure Hunt Simulator",
-    Subtitle = "By JendralHans",
-    FolderName = "JendralHansConfigs",
-    FileName = "TreasureHunt.json",
-    LoadedNotification = false
+    Subtitle = "By GANTJENK",
+    FolderName = "JHConfigs",
+    FileName = tostring(game.GameId) .. ".json"
 })
 
 local MainTab = Window:CreateTab("Main", 4483362458)
@@ -40,6 +39,8 @@ local OldChestsFolder = ReplicatedStorage:FindFirstChild("OldChests")
 local QUICK_DIG_ID = 3831582
 local SELL_POS = CFrame.new(3, 10, -160)
 local AREA = {minX = -40, maxX = 20, minZ = -235, maxZ = -175}
+local MINING_POS = CFrame.new(-13.4, 9.6, -202.6)
+local miningReturn = nil
 
 local STAT_INDEX = {
     coins = 7,
@@ -55,7 +56,7 @@ local CRATE_INDEX = {
 
 local State = {
     autoFarm = false,
-    autoDig = false,
+    autoMining = false,
     autoSell = true,
     autoRebirth = false,
     antiAfk = false,
@@ -285,7 +286,7 @@ end)
 
 task.spawn(function()
     while true do
-        if State.autoDig and not State.autoFarm then
+        if State.autoMining and not State.autoFarm then
             local tool = getTool()
             local cfg = tool and tool:FindFirstChild("Configurations")
             local hrp = getHRP()
@@ -511,13 +512,31 @@ MainTab:CreateToggle({
 })
 
 MainTab:CreateToggle({
-    Name = "Auto Dig (Nearest)",
-    Description = "Dig the nearest block in tool range without teleporting",
-    Flag = "THS_AutoDig",
+    Name = "Auto Mining",
+    Description = "Teleports to the mining spot (if Y is 9-11), digs the nearest sand, returns when turned off",
+    Flag = "THS_AutoMining",
     CurrentValue = false,
     Callback = function(v)
-        State.autoDig = v
-        notify("Auto Dig", v and "Enabled" or "Disabled")
+        if v then
+            local hrp = getHRP()
+            if hrp then
+                miningReturn = hrp.CFrame
+                local y = hrp.Position.Y
+                if y >= 9 and y <= 11 then
+                    hrp.CFrame = MINING_POS
+                end
+            end
+            State.autoMining = true
+        else
+            State.autoMining = false
+            task.wait(0.2)
+            local hrp = getHRP()
+            if hrp and miningReturn then
+                hrp.CFrame = miningReturn
+            end
+            miningReturn = nil
+        end
+        notify("Auto Mining", v and "Enabled" or "Disabled")
     end
 })
 
