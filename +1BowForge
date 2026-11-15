@@ -860,26 +860,13 @@ task.spawn(function()
 					setState(string.format("Killing mob di Stage%02d (mob: %d)", stageIdx, mobsNow))
 				end
 			elseif seenMob then
-				if not cleared and emptySince and now - emptySince < S.clearDelay then
+				if not collectOn then
+					-- Auto Collect mati / dilewati: mob = 0 langsung lanjut stage berikutnya
+					logf("Stage", "Mob = 0 & Auto Collect mati/dilewati, langsung lanjut stage", true)
+					advanceStage()
+					continue
+				elseif not cleared and emptySince and now - emptySince < S.clearDelay then
 					setState("Mob = 0, mendeteksi drop")
-				elseif not collectOn then
-					-- Auto Collect dilewati / mati: tidak ada yang diambil, jangan menunggu selamanya
-					if not cleared then
-						cleared = true
-						waitSince = now
-						logf("Stage", "Mob = 0, Auto Collect dilewati (Stage" .. stageIdx .. " < " .. S.collectFrom .. "), menunggu mob kembali bertambah", true)
-					end
-					setState("Mob = 0, menunggu mob kembali bertambah")
-					if idleElapsed >= S.collectIdle then
-						notify("Stage", "Idle " .. S.collectIdle .. " dtk & Auto Collect dilewati, paksa lanjut stage")
-						advanceStage()
-						continue
-					end
-					if S.respawnTimeout > 0 and now - waitSince >= S.respawnTimeout then
-						notify("Stage", "Mob tidak kembali " .. S.respawnTimeout .. " dtk, paksa lanjut stage")
-						advanceStage()
-						continue
-					end
 				else
 					local pc = pendingCount(hrp)
 					if pc > 0 then
