@@ -1,12 +1,3 @@
--- Auto Combat (Mobs) + Auto Stage | Archer Farm
--- Alur: Auto Combat > Auto Stage (selalu mulai Stage 1) > deteksi jumlah mob > mob = 0 > deteksi jumlah drop > Auto Collect > drop = 0
---       > mob kembali bertambah & drop tetap 0 > lanjut stage berikutnya
--- Auto Combat = tween | Auto Collect & Kembali ke Base = teleport instant
--- Dropdown "Collect From Stage" (1-30): stage di bawah pilihan hanya killing mob (Auto Collect dilewati),
---   Auto Collect aktif mulai stage pilihan dan seterusnya
--- Tidak ada auto click: serangan memakai auto-fire bawaan game
--- FIX: Idle TP melebihi batas -> paksa lanjut stage (juga saat Auto Collect dilewati / drop = 0)
-
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local TS = game:GetService("TweenService")
@@ -14,7 +5,6 @@ local TS = game:GetService("TweenService")
 local lp = Players.LocalPlayer
 local env = (getgenv and getgenv()) or _G
 
--- Guard re-execute
 local runId = {}
 env.__AC_RUN = runId
 local function running() return env.__AC_RUN == runId end
@@ -23,9 +13,6 @@ if env.__AC_CONNS then
 end
 env.__AC_CONNS = {}
 
-----------------------------------------------------------------
--- LOG + STATE
-----------------------------------------------------------------
 local logLines = {}
 local stateText = "Idle"
 local lastLog = {}
@@ -48,9 +35,6 @@ local function setState(txt)
 	end
 end
 
-----------------------------------------------------------------
--- GUI (BulbGui)
-----------------------------------------------------------------
 local BulbGui = loadstring(game:HttpGet('https://pastebin.com/raw/2BGUWvbd'))()
 local Gui = BulbGui:Init({
 	Name = "Auto Combat",
@@ -66,9 +50,6 @@ local function notify(title, content)
 	end)
 end
 
-----------------------------------------------------------------
--- Modul game
-----------------------------------------------------------------
 local Shared = RS:FindFirstChild("Shared")
 local Craft, Net
 if Shared then
@@ -78,6 +59,8 @@ end
 local State = Net and Net.State
 local Economy
 if Shared then pcall(function() Economy = require(Shared.Economy) end) end
+local Enchant
+if Shared then pcall(function() Enchant = require(Shared.Enchant) end) end
 
 local Cmd
 do
@@ -93,7 +76,7 @@ local function fireCmd(...)
 	if Cmd then
 		pcall(function() Cmd:FireServer(unpack(args)) end)
 	else
-		logf("Cmd", "Remote Cmd tidak ditemukan")
+		logf("Cmd", "Cmd remote not found")
 	end
 end
 
@@ -128,7 +111,7 @@ do
 	if sl then pcall(function() LootShared = require(sl) end) end
 end
 
-logf("Init", "Modul: Craft=" .. tostring(Craft ~= nil) .. " Net=" .. tostring(Net ~= nil)
+logf("Init", "Modules: Craft=" .. tostring(Craft ~= nil) .. " Net=" .. tostring(Net ~= nil)
 	.. " Mobs=" .. tostring(MobsMod ~= nil) .. " LootClient=" .. tostring(LootClient ~= nil)
 	.. " State=" .. tostring(StateMod ~= nil), true)
 
@@ -138,29 +121,18 @@ if Craft and Craft.RarityOrder then
 	for _, r in ipairs(Craft.RarityOrder) do table.insert(rarityList, r) end
 end
 
-----------------------------------------------------------------
--- Daftar stage 1-30 untuk dropdown Collect From Stage
-----------------------------------------------------------------
-local stageOptions = {}
-for n = 1, 30 do
-	table.insert(stageOptions, "Stage " .. n)
-end
+local materialItems = {StarDust = true, CometCore = true}
 
-local savedCollectFrom = 1
-do
-	local sv = Gui._savedFlags and Gui._savedFlags["ac_collectfrom"]
-	if type(sv) == "string" and table.find(stageOptions, sv) then
-		savedCollectFrom = tonumber(sv:match("%d+")) or 1
-	end
-end
+local extraRarity = {
+	StarDust = "Epic",
+	CometCore = "Legendary",
+	ThiefSack = "Legendary",
+}
 
-----------------------------------------------------------------
--- Settings
-----------------------------------------------------------------
 local S = {
 	combat = false,
 	collect = false,
-	boss = true,
+	boss = false,
 	distance = 5,
 	heightOffset = 3,
 	speed = 300,
@@ -172,18 +144,20 @@ local S = {
 	base = nil,
 	useWarp = true,
 	returnOnFull = true,
-	-- stage
-	stageStart = 1,                 -- Auto Stage selalu mulai dari Stage 1
-	collectFrom = savedCollectFrom, -- Auto Collect aktif mulai stage ini
+	collectMaterials = true,
+	returnHP = 20,
+	hp = nil,
+	hpArmed = true,
+	train = false,
+	trainRate = 1,
+	stageStart = 1,
 	stageMax = 30,
 	clearDelay = 0.1,
 	lootGrace = 1.0,
 	collectConfirm = 0.5,
 	collectIdle = 2,
-	respawnTimeout = 0,
 	startTimeout = 5,
 	stageLift = 8,
-	-- rebirth & home
 	autoRebirth = false,
 	homeRadius = 60,
 	camp = nil,
@@ -191,7 +165,82 @@ local S = {
 }
 for _, r in ipairs(rarityList) do S.rarity[r] = true end
 
-local current -- target mob saat ini
+local trainInfo = "-"
+
+local function normRarity(sel)
+	if type(sel) == "table" then
+		if sel.CurrentOption ~= nil then sel = sel.CurrentOption
+		elseif sel.Value ~= nil then sel = sel.Value
+		elseif sel.value ~= nil then sel = sel.value end
+	end
+	local valid = {}
+	for _, r in ipairs(rarityList) do valid[r] = true end
+	if type(sel) == "table" then
+		local t, n, total = {}, 0, 0
+		local allBool = true
+		for k, v in pairs(sel) do
+			total = total + 1
+			local name
+			if type(k) == "number" then
+				name = tostring(v)
+				allBool = false
+			elseif v then
+				name = k
+			end
+			if type(k) ~= "number" and (type(v) ~= "boolean" or not valid[k]) then allBool = false end
+			if name and valid[name] then
+				t[name] = true
+				n = n + 1
+			end
+		end
+		if total > 0 and n == 0 and not allBool then return nil end
+		return t
+	elseif type(sel) == "string" and valid[sel] then
+		return {[sel] = true}
+	end
+	return nil
+end
+
+local function readSavedFlag(flag)
+	local v
+	pcall(function()
+		if Gui._savedFlags then v = Gui._savedFlags[flag] end
+	end)
+	if v ~= nil then return v end
+	pcall(function()
+		local path = "TumblrConfigs/autocombat.json"
+		if isfile and readfile and isfile(path) then
+			local data = game:GetService("HttpService"):JSONDecode(readfile(path))
+			if type(data) == "table" then
+				v = data[flag]
+				if v == nil and type(data.Flags) == "table" then v = data.Flags[flag] end
+				if v == nil and type(data.flags) == "table" then v = data.flags[flag] end
+			end
+		end
+	end)
+	return v
+end
+
+local rarityInit = rarityList
+do
+	local saved = normRarity(readSavedFlag("ac_rarity"))
+	if saved then
+		S.rarity = saved
+		rarityInit = {}
+		local names = {}
+		for _, r in ipairs(rarityList) do
+			if saved[r] then
+				table.insert(rarityInit, r)
+				table.insert(names, r)
+			end
+		end
+		logf("Init", "Saved Rarity Collect: " .. (#names > 0 and table.concat(names, ",") or "(empty)"), true)
+	else
+		logf("Init", "Rarity Collect: no saved data, all selected", true)
+	end
+end
+
+local current
 
 local function getHRP()
 	local c = lp.Character
@@ -215,9 +264,65 @@ local function canRebirthNow()
 	return ok and res and true or false
 end
 
-----------------------------------------------------------------
--- Mob targeting
-----------------------------------------------------------------
+local function fmtNum(n)
+	n = tonumber(n) or 0
+	if n >= 1e9 then return string.format("%.2fB", n / 1e9) end
+	if n >= 1e6 then return string.format("%.2fM", n / 1e6) end
+	if n >= 1e3 then return string.format("%.1fK", n / 1e3) end
+	return tostring(math.floor(n))
+end
+
+local function enhanceReport()
+	local prof = StateMod and StateMod.profile
+	if not prof then return "Profile not loaded yet" end
+	local enh = prof.enhance
+	if type(enh) ~= "table" then return "No enhance data" end
+	local rb = prof.rebirths or 0
+	local feathers = prof.feathers or 0
+	local coins = prof.coins or 0
+	local mats = prof.materials or {}
+	local dust = mats.StarDust or 0
+	local core = mats.CometCore or 0
+	local scrolls = prof.scrolls or 0
+	local lines = {}
+
+	local openAt = Economy and Economy.RebirthUnlocks and Economy.RebirthUnlocks.mira
+	if openAt and rb < openAt then
+		lines[#lines + 1] = "Enchant unlocks at Rebirth " .. openAt .. " (now " .. rb .. ")"
+	end
+	lines[#lines + 1] = "Feather " .. feathers .. " | Coins " .. fmtNum(coins)
+		.. " | Star Dust " .. dust .. " | Comet Core " .. core .. " | Scroll " .. scrolls
+
+	local maxLv = Enchant and Enchant.maxLevel and Enchant.maxLevel(rb) or nil
+	for _, slot in ipairs({"bow", "quiver", "cloak"}) do
+		local e = enh[slot]
+		if type(e) == "table" then
+			local lv = e.level or 0
+			local cost = e.cost or {}
+			local needF, needC = cost[1] or 0, cost[2] or 0
+			local needD, needK = e.dust or 0, e.core or 0
+			local chance = math.floor((e.chance or 0) * 100 + 0.5)
+			local status
+			if Enchant and Enchant.ENHANCE_MAX and lv >= Enchant.ENHANCE_MAX then
+				status = "MAX"
+			elseif maxLv and lv >= maxLv then
+				local need = Enchant and Enchant.EnhanceOpens and Enchant.EnhanceOpens[lv + 1]
+				status = need and ("locked, needs Rebirth " .. need) or "locked"
+			else
+				local miss = {}
+				if feathers < needF then miss[#miss + 1] = "Feather " .. (needF - feathers) end
+				if coins < needC then miss[#miss + 1] = "Coins " .. fmtNum(needC - coins) end
+				if dust < needD then miss[#miss + 1] = "Dust " .. (needD - dust) end
+				if core < needK then miss[#miss + 1] = "Core " .. (needK - core) end
+				status = (#miss == 0) and "READY" or ("missing " .. table.concat(miss, ", "))
+			end
+			lines[#lines + 1] = string.format("%s +%d -> +%d | %d%% | F%d C%s D%d K%d | fails %d | %s",
+				string.upper(slot), lv, lv + 1, chance, needF, fmtNum(needC), needD, needK, e.fails or 0, status)
+		end
+	end
+	return table.concat(lines, "\n")
+end
+
 local function getMobFolder()
 	local fx = (FxMod and FxMod.folder) or workspace:FindFirstChild("FxLocal")
 	return fx and fx:FindFirstChild("Mobs")
@@ -305,15 +410,11 @@ local function aliveCount(origin)
 	return n
 end
 
-----------------------------------------------------------------
--- Movement
-----------------------------------------------------------------
 local currentTween
 local function cancelTween()
 	if currentTween then currentTween:Cancel() currentTween = nil end
 end
 
--- Tween: hanya untuk Auto Combat (menuju stage & mendekati mob)
 local function tweenTo(cf, hrp)
 	cancelTween()
 	local dist = (hrp.Position - cf.Position).Magnitude
@@ -324,17 +425,13 @@ local function tweenTo(cf, hrp)
 	return currentTween, t
 end
 
--- Teleport instant: untuk Auto Collect & Kembali ke Base
 local function tpTo(cf, hrp)
 	cancelTween()
-	logf("Move", string.format("Teleport instant %.0f studs", (hrp.Position - cf.Position).Magnitude))
+	logf("Move", string.format("Instant teleport %.0f studs", (hrp.Position - cf.Position).Magnitude))
 	hrp.CFrame = cf
 	hrp.AssemblyLinearVelocity = Vector3.zero
 end
 
-----------------------------------------------------------------
--- Stage lookup (Workspace ... StageXX)
-----------------------------------------------------------------
 local stageCache = {}
 
 local function findStage(n)
@@ -347,11 +444,11 @@ local function findStage(n)
 			and (d:IsA("Model") or d:IsA("BasePart") or d:IsA("Folder"))
 			and not (cam and d:IsDescendantOf(cam)) then
 			stageCache[n] = d
-			logf("Stage", "Ditemukan " .. name)
+			logf("Stage", "Found " .. name)
 			return d
 		end
 	end
-	logf("Stage", name .. " tidak ditemukan")
+	logf("Stage", name .. " not found")
 	return nil
 end
 
@@ -362,9 +459,6 @@ local function stagePos(inst)
 	return r and r.Position
 end
 
-----------------------------------------------------------------
--- Bag / Base / Drops
-----------------------------------------------------------------
 local needTravel = false
 local resetStage
 
@@ -373,6 +467,7 @@ local skipLogged = {}
 local bagList, bagSize = {}, 0
 local lastCollectTP = os.clock()
 local clearSince = nil
+local dropSeen = false
 do
 	local prof = StateMod and StateMod.profile
 	if prof then
@@ -392,13 +487,14 @@ local function addDrop(id, item, x, z, auto)
 	if not drops[id] then
 		drops[id] = {id = id, item = item, x = x, z = z, auto = auto, t = os.clock()}
 		clearSince = nil
-		logf("Drop", string.format("Baca drop #%s %s (%.0f, %.0f)%s", tostring(id), tostring(item), x, z, auto and " [auto]" or ""), true)
+		dropSeen = true
+		logf("Drop", string.format("Read drop #%s %s (%.0f, %.0f)%s", tostring(id), tostring(item), x, z, auto and " [auto]" or ""), true)
 	end
 end
 
 local function removeDrop(id)
 	if drops[id] ~= nil then
-		logf("Drop", "Hapus drop #" .. tostring(id))
+		logf("Drop", "Removed drop #" .. tostring(id))
 	end
 	drops[id] = nil
 	asked[id] = nil
@@ -407,8 +503,13 @@ end
 
 if Net and Net.Evt then
 	local c = Net.Evt.OnClientEvent:Connect(function(name, data)
+		if type(data) == "table" and data.hp
+			and (name == "PHit" or name == "S" or name == "Heal" or name == "Died" or name == "Warped" or name == "Floor") then
+			S.hp = tonumber(data.hp) or S.hp
+			if S.hp and S.hp >= S.returnHP then S.hpArmed = true end
+		end
 		if name == "StageLoot" and type(data) == "table" and data.drops then
-			logf("Event", "StageLoot: " .. #data.drops .. " drop masuk", true)
+			logf("Event", "StageLoot: " .. #data.drops .. " drops received", true)
 			for _, d in ipairs(data.drops) do addDrop(d[1], d[2], d[3], d[4]) end
 		elseif name == "Drop" and type(data) == "table" then
 			local p = data.pos
@@ -423,7 +524,7 @@ if Net and Net.Evt then
 			logf("Event", "Picked #" .. tostring(data.id))
 			removeDrop(data.id)
 		elseif name == "LootGone" and type(data) == "table" and data.ids then
-			logf("Event", "LootGone: " .. #data.ids .. " drop hilang")
+			logf("Event", "LootGone: " .. #data.ids .. " drops gone")
 			for _, id in ipairs(data.ids) do removeDrop(id) end
 		elseif name == "Collected" and type(data) == "table" then
 			if data.bag then bagList = data.bag end
@@ -442,12 +543,12 @@ if Net and Net.Evt then
 			logf("Event", "BagFull", true)
 			if S.returnOnFull then S.bagFull = true end
 		elseif name == "Banked" then
-			logf("Event", "Banked: bag dikosongkan", true)
+			logf("Event", "Banked: bag emptied", true)
 			bagList = {}
 			S.bagFull = false
 			S.returning = false
 		elseif name == "Room" then
-			logf("Event", "Room: reset semua drop", true)
+			logf("Event", "Room: reset all drops", true)
 			S.bagFull = false
 			S.returning = false
 			table.clear(drops)
@@ -457,14 +558,13 @@ if Net and Net.Evt then
 	end)
 	table.insert(env.__AC_CONNS, c)
 else
-	logf("Init", "Net.Evt tidak ditemukan, drop hanya dari sinkron client", true)
+	logf("Init", "Net.Evt not found, drops only from client sync", true)
 end
 
--- Return ke base: teleport INSTANT, lalu ulang semuanya dari Stage 1
-local function returnToBase()
+local function returnToBase(reason)
 	if S.returning then return end
 	S.returning = true
-	setState("Return ke base (teleport instant)")
+	setState("Returning to base (" .. (reason == "hp" and "low HP" or "bag full") .. ", instant teleport)")
 	cancelTween()
 	local hrp = getHRP()
 	if hrp and S.base then
@@ -477,33 +577,39 @@ local function returnToBase()
 		task.wait(0.2)
 	end
 	S.bagFull = false
+	if reason == "hp" then
+		local t1 = os.clock()
+		while S.hp and S.hp < S.returnHP and os.clock() - t1 < 10 and running() do
+			task.wait(0.2)
+		end
+		S.hpArmed = (S.hp == nil) or S.hp >= S.returnHP
+	end
 	S.returning = false
 	if S.useWarp then
 		task.wait(1)
 		local h = getHRP()
 		if h then S.camp = h.Position end
 	end
-	logf("Base", "Return selesai", true)
+	logf("Base", "Return finished", true)
 	if resetStage then resetStage() end
 end
 
-----------------------------------------------------------------
--- Collect (event StageLoot/Drop + Cmd "Collect", id, swap)
-----------------------------------------------------------------
 local pickupRange = (LootShared and LootShared.Tuning and LootShared.Tuning.pickupRange) or 9
 local dropLife = (LootShared and LootShared.Tuning and LootShared.Tuning.dropLife) or 60
 
 local function takeMode(d)
 	if d.auto then return "auto" end
+	if S.collectMaterials and materialItems[d.item] then return "collect" end
 	local def = Craft and Craft.Essences and Craft.Essences[d.item]
-	if not def then return "collect" end
-	if S.rarity[def.rarity] ~= true then
+	local rarity = (def and def.rarity) or extraRarity[d.item]
+	if not rarity or S.rarity[rarity] ~= true then
 		if not skipLogged[d.id] then
 			skipLogged[d.id] = true
-			logf("Drop", "Skip #" .. tostring(d.id) .. " " .. tostring(d.item) .. " (rarity " .. tostring(def.rarity) .. " tidak dipilih)", true)
+			logf("Drop", "Ignored #" .. tostring(d.id) .. " " .. tostring(d.item) .. " (rarity " .. tostring(rarity or "unknown") .. " not selected)", true)
 		end
 		return nil
 	end
+	if not def then return "collect" end
 	if bagSize == 0 or #bagList < bagSize then return "collect" end
 	local idx = LootShared and LootShared.lowest and LootShared.lowest(bagList)
 	local low = idx and bagList[idx]
@@ -527,7 +633,7 @@ local function syncFromClient(hrp)
 	lastSync = os.clock()
 	local ok, rec = pcall(LootClient.nearest, hrp.Position, S.collectRange)
 	if ok and type(rec) == "table" and rec.id and rec.pos and not drops[rec.id] then
-		logf("Sync", "Drop dari client Loot.nearest: #" .. tostring(rec.id))
+		logf("Sync", "Drop from client Loot.nearest: #" .. tostring(rec.id))
 		addDrop(rec.id, rec.item, rec.pos.X, rec.pos.Z)
 	end
 end
@@ -539,7 +645,7 @@ local function nearestDrop(hrp)
 	local blocked = false
 	for id, d in pairs(drops) do
 		if now - d.t > dropLife then
-			logf("Drop", "Drop #" .. tostring(id) .. " kedaluwarsa")
+			logf("Drop", "Drop #" .. tostring(id) .. " expired")
 			removeDrop(id)
 		elseif now - d.t >= 0.6 and (asked[id] or 0) < 3 then
 			local mode, full = takeMode(d)
@@ -552,13 +658,12 @@ local function nearestDrop(hrp)
 		end
 	end
 	if not best and blocked and S.returnOnFull and not S.returning then
-		logf("Bag", "Bag penuh & loot bagus tidak bisa ditukar -> return", true)
+		logf("Bag", "Bag full & good loot cannot be swapped -> return", true)
 		S.bagFull = true
 	end
 	return best, bestMode
 end
 
--- jumlah drop yang masih bisa/akan diambil (sesuai rarity, dalam jarak collect)
 local function pendingCount(hrp)
 	syncFromClient(hrp)
 	local now = os.clock()
@@ -576,11 +681,10 @@ local function pendingCount(hrp)
 	return n
 end
 
--- Auto Collect: teleport INSTANT ke drop
 local function collectDrop(d, mode, hrp)
 	clearSince = nil
 	setState("Collecting: " .. tostring(d.item) .. " [" .. mode .. "]")
-	logf("Collect", "Ambil #" .. tostring(d.id) .. " " .. tostring(d.item) .. " mode=" .. mode)
+	logf("Collect", "Pick #" .. tostring(d.id) .. " " .. tostring(d.item) .. " mode=" .. mode)
 	local stand = Vector3.new(d.x, groundY(d.x, d.z, hrp) + 3, d.z)
 	local flat = (Vector3.new(d.x, 0, d.z) - Vector3.new(hrp.Position.X, 0, hrp.Position.Z)).Magnitude
 	local reach = d.auto and 4 or (pickupRange - 4)
@@ -590,7 +694,7 @@ local function collectDrop(d, mode, hrp)
 		task.wait(0.1)
 	end
 	if not drops[d.id] then
-		logf("Collect", "Drop #" .. tostring(d.id) .. " sudah hilang")
+		logf("Collect", "Drop #" .. tostring(d.id) .. " already gone")
 		return
 	end
 	asked[d.id] = (asked[d.id] or 0) + 1
@@ -602,16 +706,12 @@ local function collectDrop(d, mode, hrp)
 	end
 end
 
-----------------------------------------------------------------
--- Stage state
-----------------------------------------------------------------
 local stageIdx = nil
 local stageDone = false
 local stageBroken = false
 local enteredAt, seenMob, emptySince, emptyTries = 0, false, nil, 0
 local mobCount = 0
 local cleared = false
-local waitSince = 0
 
 local function resetStageTimers()
 	enteredAt = os.clock()
@@ -620,7 +720,7 @@ local function resetStageTimers()
 	lastCollectTP = os.clock()
 	clearSince = nil
 	cleared = false
-	waitSince = 0
+	dropSeen = false
 end
 
 resetStage = function()
@@ -633,12 +733,11 @@ resetStage = function()
 	resetStageTimers()
 end
 
--- Menuju stage: TWEEN (bagian Auto Combat)
 local function goStage(n, hrp)
 	local inst = findStage(n)
 	local pos = inst and stagePos(inst)
 	if not pos then return false end
-	setState(string.format("Menuju Stage%02d", n))
+	setState(string.format("Going to Stage%02d", n))
 	local tw, t = tweenTo(CFrame.new(pos + Vector3.new(0, S.stageLift, 0)), hrp)
 	local t0 = os.clock()
 	while running() and S.combat and not S.bagFull
@@ -646,38 +745,32 @@ local function goStage(n, hrp)
 		and tw.PlaybackState == Enum.PlaybackState.Playing do
 		task.wait(0.05)
 	end
-	logf("Stage", string.format("Tiba di Stage%02d", n), true)
+	logf("Stage", string.format("Arrived at Stage%02d", n), true)
 	return true
 end
 
 local function advanceStage()
 	emptyTries = 0
 	cleared = false
-	waitSince = 0
 	clearSince = nil
+	dropSeen = false
 	if stageIdx >= S.stageMax then
 		stageDone = true
-		setState("Selesai: batas stage " .. stageIdx)
-		notify("Stage", "Stage " .. stageIdx .. " selesai (batas maksimal)")
+		setState("Finished: stage limit " .. stageIdx)
+		notify("Stage", "Stage " .. stageIdx .. " finished (max limit)")
 	else
 		stageIdx = stageIdx + 1
 		needTravel = true
-		-- Drop sisa stage sebelumnya dibuang bila stage baru belum/baru mulai Auto Collect
-		if stageIdx <= S.collectFrom then
-			table.clear(drops)
-			table.clear(asked)
-			table.clear(skipLogged)
-		end
-		setState("Lanjut ke Stage " .. stageIdx)
-		notify("Stage", "Lanjut ke Stage " .. stageIdx)
+		table.clear(drops)
+		table.clear(asked)
+		table.clear(skipLogged)
+		setState("Next: Stage " .. stageIdx)
+		notify("Stage", "Moving to Stage " .. stageIdx)
 	end
 end
 
-----------------------------------------------------------------
--- Loops
-----------------------------------------------------------------
 table.insert(env.__AC_CONNS, lp.CharacterAdded:Connect(function(char)
-	logf("Char", "Karakter respawn", true)
+	logf("Char", "Character respawned", true)
 	local hrp = char:WaitForChild("HumanoidRootPart", 10)
 	if not hrp then return end
 	task.wait(0.5)
@@ -686,34 +779,172 @@ table.insert(env.__AC_CONNS, lp.CharacterAdded:Connect(function(char)
 	cancelTween()
 	resetStage()
 	if S.combat then
-		notify("Stage", "Respawn di base, mulai dari Stage " .. S.stageStart)
+		notify("Stage", "Respawned at base, starting from Stage " .. S.stageStart)
 	end
 end))
 
--- Auto Rebirth
+local trainRanges = {
+	{n = 1,  name = "Hay",       min = 0},
+	{n = 2,  name = "Stone",     min = 2},
+	{n = 3,  name = "Iron",      min = 5},
+	{n = 4,  name = "Silver",    min = 7},
+	{n = 5,  name = "Crystal",   min = 9},
+	{n = 6,  name = "Gold",      min = 11},
+	{n = 7,  name = "Dragon",    min = 13},
+	{n = 8,  name = "Starlight", min = 15},
+	{n = 12, name = "Meteor",    min = 18},
+	{n = 13, name = "Nebula",    min = 21},
+	{n = 14, name = "Galaxy",    min = 24},
+}
+for _, r in ipairs(trainRanges) do
+	r.model = string.format("Range_%d_%s", r.n, r.name)
+end
+
+local function pickTrainRange()
+	local prof = StateMod and StateMod.profile
+	local rb = prof and prof.rebirths
+	if rb == nil then return nil, nil end
+	local best
+	for _, r in ipairs(trainRanges) do
+		if rb >= r.min and (not best or r.min > best.min) then best = r end
+	end
+	return best, rb
+end
+
+local function findTrainPad(r)
+	if r.pad and r.pad.Parent then return r.pad end
+	local lobby = workspace:FindFirstChild("SkyIslesLobby_Redesign")
+	if not lobby then return nil end
+	local model = lobby:FindFirstChild(r.model) or lobby:FindFirstChild(r.model, true)
+	if not model then return nil end
+	local pad = model:FindFirstChild(r.model .. "_Pad__Color")
+		or model:FindFirstChild(r.model .. "_Pad_Color")
+	if not pad then
+		for _, d in ipairs(model:GetDescendants()) do
+			if d.Name:find("Pad", 1, true) and d.Name:find("Color", 1, true) then
+				pad = d
+				break
+			end
+		end
+	end
+	r.pad = pad
+	return pad
+end
+
+local combatToggle, trainToggle
+
+local function setToggleUI(ret, v)
+	if type(ret) ~= "table" then return end
+	for _, o in ipairs(ret) do
+		if type(o) == "table" then
+			for _, fn in ipairs({"Set", "SetValue"}) do
+				if type(o[fn]) == "function" then
+					pcall(o[fn], o, v)
+					return
+				end
+			end
+		end
+	end
+end
+
+local function offBoth()
+	S.combat = false
+	S.train = false
+	current = nil
+	cancelTween()
+	setToggleUI(combatToggle, false)
+	setToggleUI(trainToggle, false)
+	notify("Warning", "Auto Combat & Auto Train both on, both turned off")
+end
+
+task.spawn(function()
+	local lastPick = 0
+	local range, rbNow
+
+	while running() do
+		task.wait(0.05)
+
+		if S.train and S.combat then
+			offBoth()
+		end
+
+		if not S.train then
+			range = nil
+			lastPick = 0
+			trainInfo = "Off"
+			continue
+		end
+
+		local hrp, hum = getHRP()
+		if not (hrp and hum and hum.Health > 0) then continue end
+
+		local now = os.clock()
+
+		if not range or now - lastPick >= S.trainRate then
+			lastPick = now
+			local r, rb = pickTrainRange()
+			if not r then
+				trainInfo = "Waiting for rebirth data"
+				continue
+			end
+			if r ~= range then
+				if range then
+					logf("Train", "Rebirth " .. tostring(rb) .. " -> moving to Range " .. r.name .. " (min rebirth " .. r.min .. ")", true)
+					notify("Train", "Rebirth " .. tostring(rb) .. ", moving to Range " .. r.name)
+				else
+					logf("Train", "Rebirth " .. tostring(rb) .. " -> Range " .. r.name .. " (min rebirth " .. r.min .. ")", true)
+				end
+				range = r
+			end
+			rbNow = rb
+		end
+
+		local pad = findTrainPad(range)
+		if not pad then
+			trainInfo = range.model .. " Pad not found"
+			logf("Train", "Pad " .. range.model .. "_Pad__Color not found in SkyIslesLobby_Redesign")
+			continue
+		end
+
+		local pos, half
+		if pad:IsA("BasePart") then
+			pos, half = pad.Position, pad.Size.Y / 2
+		else
+			pos, half = pad:GetPivot().Position, 0.5
+		end
+		local target = pos + Vector3.new(0, half + 3, 0)
+		local flat = (Vector3.new(target.X, 0, target.Z) - Vector3.new(hrp.Position.X, 0, hrp.Position.Z)).Magnitude
+		if flat > 6 or math.abs(hrp.Position.Y - target.Y) > 8 then
+			tpTo(CFrame.new(target), hrp)
+			task.wait(0.1)
+		end
+
+		trainInfo = string.format("%s (Rebirth %s, min %d)", range.name, tostring(rbNow), range.min)
+	end
+end)
+
 task.spawn(function()
 	while running() do
 		task.wait(1)
 		if S.autoRebirth and not S.returning and canRebirthNow() then
-			setState("Rebirth: mencoba rebirth")
+			setState("Rebirth: attempting rebirth")
 			local before = (StateMod.profile.rebirths or 0)
 			fireCmd("Rebirth")
 			task.wait(3)
 			local prof = StateMod.profile
 			if prof and (prof.rebirths or 0) > before then
-				notify("Rebirth", "Rebirth " .. prof.rebirths .. " berhasil, mulai dari Stage " .. S.stageStart)
+				notify("Rebirth", "Rebirth " .. prof.rebirths .. " successful, starting from Stage " .. S.stageStart)
 				current = nil
 				cancelTween()
 				resetStage()
 			else
-				logf("Rebirth", "Rebirth gagal, coba lagi 5 detik", true)
+				logf("Rebirth", "Rebirth failed, retrying in 5 seconds", true)
 				task.wait(5)
 			end
 		end
 	end
 end)
 
--- Main loop
 task.spawn(function()
 	local lastTween, lastHomeCheck = 0, 0
 	local wasActive = false
@@ -726,25 +957,36 @@ task.spawn(function()
 			cancelTween()
 			current = nil
 			wasActive = false
-			setState("Idle (Auto Combat & Auto Collect mati)")
+			setState(S.train and "Auto Train active" or "Idle (Auto Combat & Auto Collect off)")
 			continue
 		end
 		if not wasActive then
 			wasActive = true
-			logf("Main", "Loop aktif (combat=" .. tostring(S.combat) .. " collect=" .. tostring(S.collect) .. ")", true)
+			logf("Main", "Loop active (combat=" .. tostring(S.combat) .. " collect=" .. tostring(S.collect) .. ")", true)
 			resetStageTimers()
 		end
 
 		local hrp, hum = getHRP()
 		if not (hrp and hum and hum.Health > 0) then
 			current = nil
-			setState("Menunggu karakter hidup")
+			setState("Waiting for character")
 			continue
 		end
 
 		if S.bagFull then
 			current = nil
-			returnToBase()
+			returnToBase("bag")
+			resetStageTimers()
+			continue
+		end
+
+		if S.returnOnFull and S.combat and S.hpArmed and S.hp and S.hp > 0
+			and S.hp < S.returnHP and not S.returning then
+			logf("HP", "HP " .. S.hp .. " < " .. S.returnHP .. ", returning to base", true)
+			notify("Return", "HP " .. math.floor(S.hp) .. " below " .. S.returnHP .. ", returning to base")
+			current = nil
+			S.hpArmed = false
+			returnToBase("hp")
 			resetStageTimers()
 			continue
 		end
@@ -752,7 +994,6 @@ task.spawn(function()
 		local now = os.clock()
 		local handled = false
 
-		-- Cek lokasi: di base/return (bukan di stage) -> mulai lagi dari stage awal
 		if S.combat and stageIdx and not stageBroken
 			and not needTravel and now - lastHomeCheck > 0.3 then
 			lastHomeCheck = now
@@ -763,7 +1004,7 @@ task.spawn(function()
 					current = nil
 					cancelTween()
 					resetStage()
-					notify("Stage", "Di base, mulai dari Stage " .. S.stageStart)
+					notify("Stage", "At base, starting from Stage " .. S.stageStart)
 					continue
 				end
 			end
@@ -771,12 +1012,11 @@ task.spawn(function()
 
 		local stageActive = S.combat and not stageDone and not stageBroken
 
-		-- [1] Auto Stage: init + travel ke stage (tween)
 		if stageActive then
 			if not stageIdx then
 				stageIdx = math.clamp(S.stageStart, 1, 30)
 				needTravel = true
-				logf("Stage", "Mulai dari Stage " .. stageIdx, true)
+				logf("Stage", "Starting from Stage " .. stageIdx, true)
 			end
 			if needTravel then
 				needTravel = false
@@ -785,25 +1025,20 @@ task.spawn(function()
 					resetStageTimers()
 				else
 					stageBroken = true
-					setState(string.format("Error: Stage%02d tidak ditemukan", stageIdx))
-					notify("Stage", string.format("Stage%02d tidak ditemukan di Workspace, Auto Stage dilewati", stageIdx))
+					setState(string.format("Error: Stage%02d not found", stageIdx))
+					notify("Stage", string.format("Stage%02d not found in Workspace, Auto Stage skipped", stageIdx))
 				end
 				continue
 			end
 		end
 
-		-- Auto Collect efektif: stage di bawah Collect From Stage = hanya killing mob
 		local collectOn = S.collect
-		if collectOn and stageActive and stageIdx and stageIdx < S.collectFrom then
-			collectOn = false
-		end
 
-		-- [2] Deteksi jumlah mob
 		local mobsNow = nil
 		if stageActive then
 			mobsNow = aliveCount(hrp.Position)
 			if mobsNow ~= mobCount then
-				logf("Mob", "Jumlah mob: " .. mobCount .. " -> " .. mobsNow, true)
+				logf("Mob", "Mob count: " .. mobCount .. " -> " .. mobsNow, true)
 				mobCount = mobsNow
 			end
 			if mobsNow > 0 then
@@ -811,7 +1046,7 @@ task.spawn(function()
 				if cleared then
 					local pc = collectOn and pendingCount(hrp) or 0
 					if pc == 0 then
-						logf("Mob", "Mob kembali bertambah (" .. mobsNow .. ") & drop = 0, lanjut stage", true)
+						logf("Mob", "Mobs respawned (" .. mobsNow .. ") & all drops checked, next stage", true)
 						advanceStage()
 						continue
 					end
@@ -822,17 +1057,15 @@ task.spawn(function()
 				end
 			elseif seenMob and not emptySince then
 				emptySince = now
-				logf("Mob", "Mob = 0, lanjut deteksi drop", true)
+				logf("Mob", "Mobs = 0, detecting drops", true)
 			end
 		end
 
-		-- Waktu idle sejak mob habis / teleport collect terakhir
 		local idleElapsed = 0
 		if stageActive and seenMob and emptySince then
 			idleElapsed = now - math.max(emptySince, lastCollectTP)
 		end
 
-		-- [3] Auto Collect
 		if collectOn and (mobsNow == nil or mobsNow == 0 or cleared) then
 			local d, mode = nearestDrop(hrp)
 			if d then
@@ -842,7 +1075,7 @@ task.spawn(function()
 				end
 				if stageActive and seenMob and emptySince
 					and now - math.max(emptySince, lastCollectTP) >= S.collectIdle then
-					notify("Collect", "Tidak teleport " .. S.collectIdle .. " dtk, paksa lanjut stage")
+					notify("Collect", "No teleport for " .. S.collectIdle .. "s, forcing next stage")
 					advanceStage()
 				else
 					collectDrop(d, mode, hrp)
@@ -851,57 +1084,45 @@ task.spawn(function()
 			end
 		end
 
-		-- [4] Keputusan stage
 		if not handled and stageActive then
 			if mobsNow > 0 then
 				if cleared then
-					setState(string.format("Stage clear, mob kembali (%d), menunggu Auto Collect", mobsNow))
+					setState(string.format("Mobs back (%d), waiting for Auto Collect", mobsNow))
 				else
-					setState(string.format("Killing mob di Stage%02d (mob: %d)", stageIdx, mobsNow))
+					setState(string.format("Killing mobs in Stage%02d (mobs: %d)", stageIdx, mobsNow))
 				end
 			elseif seenMob then
 				if not collectOn then
-					-- Auto Collect mati / dilewati: mob = 0 langsung lanjut stage berikutnya
-					logf("Stage", "Mob = 0 & Auto Collect mati/dilewati, langsung lanjut stage", true)
+					logf("Stage", "Mobs = 0 & Auto Collect off, next stage", true)
 					advanceStage()
 					continue
 				elseif not cleared and emptySince and now - emptySince < S.clearDelay then
-					setState("Mob = 0, mendeteksi drop")
+					setState("Mobs = 0, checking drops")
 				else
 					local pc = pendingCount(hrp)
 					if pc > 0 then
 						cleared = true
 						clearSince = nil
-						waitSince = now
 						if idleElapsed >= S.collectIdle then
-							notify("Collect", "Tidak teleport " .. S.collectIdle .. " dtk, paksa lanjut stage")
+							notify("Collect", "No teleport for " .. S.collectIdle .. "s, forcing next stage")
 							advanceStage()
 							continue
 						end
-						setState("Drop = " .. pc .. ", Auto Collect berjalan")
-					elseif cleared then
-						setState("Mob = 0, Drop = 0, menunggu mob kembali bertambah")
-						if idleElapsed >= S.collectIdle then
-							notify("Stage", "Drop = 0 & idle " .. S.collectIdle .. " dtk, paksa lanjut stage")
-							advanceStage()
-							continue
-						end
-						if S.respawnTimeout > 0 and now - waitSince >= S.respawnTimeout then
-							notify("Stage", "Mob tidak kembali " .. S.respawnTimeout .. " dtk, paksa lanjut stage")
-							advanceStage()
-							continue
-						end
+						setState("Drops = " .. pc .. ", Auto Collect running")
+					elseif dropSeen then
+						logf("Collect", "All drops checked, next stage", true)
+						advanceStage()
+						continue
 					elseif now - (emptySince or now) < S.lootGrace then
-						setState("Mob = 0, Drop = 0, menunggu drop muncul")
+						setState("Mobs = 0, waiting for drops")
 					else
 						clearSince = clearSince or now
 						if now - clearSince >= S.collectConfirm then
-							cleared = true
-							waitSince = now
-							logf("Collect", "Drop = 0 terkonfirmasi, menunggu mob kembali bertambah", true)
-							setState("Drop = 0 terkonfirmasi, menunggu mob kembali bertambah")
+							logf("Collect", "Drops = 0 confirmed, next stage", true)
+							advanceStage()
+							continue
 						else
-							setState("Drop = 0, konfirmasi Auto Collect")
+							setState("Drops = 0, confirming Auto Collect")
 						end
 					end
 				end
@@ -909,9 +1130,9 @@ task.spawn(function()
 				local pc = collectOn and pendingCount(hrp) or 0
 				if pc == 0 then
 					emptyTries = emptyTries + 1
-					logf("Stage", "Mob tidak muncul (percobaan " .. emptyTries .. "/2)", true)
+					logf("Stage", "No mobs appeared (attempt " .. emptyTries .. "/2)", true)
 					if emptyTries >= 2 then
-						notify("Stage", "Stage " .. stageIdx .. " tidak ada mob, dilewati")
+						notify("Stage", "Stage " .. stageIdx .. " has no mobs, skipped")
 						advanceStage()
 					else
 						needTravel = true
@@ -919,11 +1140,10 @@ task.spawn(function()
 					continue
 				end
 			else
-				setState("Menunggu mob muncul")
+				setState("Waiting for mobs to spawn")
 			end
 		end
 
-		-- [5] Combat: serang mob terdekat (tween bila jauh)
 		if not handled and S.combat then
 			if not targetValid(current) then
 				current = listTargets(hrp.Position)[1]
@@ -931,7 +1151,7 @@ task.spawn(function()
 					local nm = (current.fallback and tostring(current.ref.Name))
 						or (current.ref.def and tostring(current.ref.def.name or current.ref.def.id))
 						or "mob"
-					logf("Combat", "Target baru: " .. nm)
+					logf("Combat", "New target: " .. nm)
 				end
 			end
 
@@ -960,15 +1180,11 @@ task.spawn(function()
 	end
 end)
 
-----------------------------------------------------------------
--- UI
-----------------------------------------------------------------
 local Tab = Gui:CreateTab({Name = "Combat", Icon = 10723434711, Expanded = true})
 
--- Paragraph State: paling atas tab, tanpa section
-local StateFrame, _, _, StatePara = Tab:CreateParagraph({
+local StateFrame, _, _, StatePara = Gui:CreateSettingsParagraph({
 	Title = "State",
-	Content = "Idle"
+	Content = "-"
 })
 pcall(function() StateFrame.LayoutOrder = -2000 end)
 
@@ -986,14 +1202,13 @@ task.spawn(function()
 		end
 		local idleT = math.max(0, os.clock() - lastCollectTP)
 		local confT = clearSince and math.max(0, os.clock() - clearSince) or 0
-		local collectNow = S.collect and (not stageIdx or stageIdx >= S.collectFrom)
 		local txt = "Status: " .. stateText
-			.. "\nStage: " .. tostring(stageIdx or "-") .. "/" .. S.stageMax .. "  |  Collect dari: " .. S.collectFrom .. "  |  Mob: " .. mobs
-			.. "\nAuto Collect stage ini: " .. (collectNow and "AKTIF" or "DILEWATI")
-			.. "\nDrop: " .. pend .. " (total " .. countDrops() .. ")  |  Bag: " .. #bagList .. "/" .. bagSize
-			.. string.format("\nIdle TP: %.1f/%.1fs  |  Konfirmasi: %.1f/%.1fs", idleT, S.collectIdle, confT, S.collectConfirm)
-			.. "\nStage Clear: " .. (cleared and "YA" or "TIDAK")
-			.. "\n--- Log ---\n" .. table.concat(logLines, "\n")
+			.. "\nStage: " .. tostring(stageIdx or "-") .. "/" .. S.stageMax .. "  |  Mob: " .. mobs .. "  |  HP: " .. tostring(S.hp and math.floor(S.hp) or "-") .. " (limit " .. S.returnHP .. ")"
+			.. "\nTrain: " .. trainInfo
+			.. "\nRarity drops: " .. pend .. " (total read " .. countDrops() .. ")  |  Bag: " .. #bagList .. "/" .. bagSize
+			.. "\nDrops read this stage: " .. (dropSeen and "YES" or "NO")
+			.. string.format("\nIdle TP: %.1f/%.1fs  |  Confirm: %.1f/%.1fs", idleT, S.collectIdle, confT, S.collectConfirm)
+			.. "\nStage Clear: " .. (cleared and "YES" or "NO")
 		if txt ~= lastText then
 			lastText = txt
 			pcall(function() StatePara:Set("State", txt) end)
@@ -1003,12 +1218,16 @@ end)
 
 Tab:CreateSection({Name = "Auto Combat"})
 
-Tab:CreateToggle({
+combatToggle = {Tab:CreateToggle({
 	Name = "Auto Combat",
-	Description = "Auto Stage dari Stage 1: mob 0 -> drop 0 -> mob kembali bertambah -> stage berikutnya",
+	Description = "Kill mobs automatically",
 	Flag = "ac_combat",
 	CurrentValue = false,
 	Callback = function(v)
+		if v and S.train then
+			offBoth()
+			return
+		end
 		S.combat = v
 		logf("UI", "Auto Combat " .. (v and "ON" or "OFF"), true)
 		if v then
@@ -1017,7 +1236,7 @@ Tab:CreateToggle({
 				if not S.base then S.base = hrp.Position end
 				if nearHome(hrp.Position) then
 					resetStage()
-					notify("Stage", "Di base, mulai dari Stage " .. S.stageStart)
+					notify("Stage", "At base, starting from Stage " .. S.stageStart)
 				end
 			end
 		else
@@ -1025,87 +1244,131 @@ Tab:CreateToggle({
 			cancelTween()
 		end
 	end
-})
-
-Tab:CreateToggle({
-	Name = "Serang Boss",
-	Description = "Matikan untuk skip boss",
-	Flag = "ac_boss",
-	CurrentValue = true,
-	Callback = function(v)
-		S.boss = v
-		logf("UI", "Serang Boss " .. (v and "ON" or "OFF"), true)
-	end
-})
+})}
 
 Tab:CreateSlider({
-	Name = "Jarak ke Mob",
+	Name = "Mob Distance",
 	Flag = "ac_distance",
 	Range = {1, 40},
 	Increment = 1,
 	CurrentValue = 5,
-	Callback = function(v) S.distance = v; logf("UI", "Jarak ke Mob = " .. v) end
+	Callback = function(v) S.distance = v; logf("UI", "Mob Distance = " .. v) end
 })
 
 Tab:CreateSlider({
-	Name = "Tinggi Berdiri",
-	Description = "Offset Y dari lantai",
+	Name = "Stand Height",
+	Description = "Height offset from floor",
 	Flag = "ac_height",
 	Range = {0, 20},
 	Increment = 1,
 	CurrentValue = 3,
-	Callback = function(v) S.heightOffset = v; logf("UI", "Tinggi Berdiri = " .. v) end
+	Callback = function(v) S.heightOffset = v; logf("UI", "Stand Height = " .. v) end
 })
 
 Tab:CreateButton({
 	Name = "Reset Stage",
-	Description = "Mulai lagi dari Stage 1",
+	Description = "Restart from Stage 1",
 	Interact = "Reset",
 	Callback = function()
-		logf("UI", "Tombol Reset Stage", true)
+		logf("UI", "Reset Stage button", true)
 		resetStage()
-		notify("Stage", "Reset, mulai dari Stage " .. S.stageStart)
+		notify("Stage", "Reset, starting from Stage " .. S.stageStart)
 	end
 })
+
+Tab:CreateSection({Name = "Auto Train"})
+
+trainToggle = {Tab:CreateToggle({
+	Name = "Auto Train",
+	Description = "Stand on the Pad matching your Rebirth",
+	CurrentValue = false,
+	Callback = function(v)
+		if v and S.combat then
+			offBoth()
+			return
+		end
+		S.train = v
+		logf("UI", "Auto Train " .. (v and "ON" or "OFF"), true)
+		if v then
+			resetStage()
+		end
+	end
+})}
 
 Tab:CreateSection({Name = "Auto Rebirth"})
 
 Tab:CreateToggle({
 	Name = "Auto Rebirth",
-	Description = "Rebirth otomatis kalau Level cukup, lalu ulang dari Stage 1",
+	Description = "Rebirth automatically when able",
 	Flag = "ac_rebirth",
 	CurrentValue = false,
 	Callback = function(v)
 		S.autoRebirth = v
 		logf("UI", "Auto Rebirth " .. (v and "ON" or "OFF"), true)
 		if v and not (StateMod and Economy) then
-			notify("Rebirth", "Module State/Economy tidak ditemukan, Auto Rebirth tidak bisa cek Level")
+			notify("Rebirth", "State/Economy module not found, Auto Rebirth cannot check Level")
 		end
 	end
 })
 
+Tab:CreateSection({Name = "Enhance Info"})
+
+local _, _, _, EnhPara = Tab:CreateParagraph({
+	Title = "Enhance",
+	Content = "-"
+})
+
+task.spawn(function()
+	local lastText = ""
+	while running() do
+		task.wait(1)
+		local ok, txt = pcall(enhanceReport)
+		if not ok then txt = "Failed to read enhance data" end
+		if txt ~= lastText then
+			lastText = txt
+			pcall(function() EnhPara:Set("Enhance", txt) end)
+		end
+	end
+end)
+
 Tab:CreateSection({Name = "Auto Collect"})
 
-Tab:CreateDropdown({
-	Name = "Collect From Stage",
-	Description = "Stage di bawah pilihan hanya killing mob, Auto Collect mulai dari stage ini",
-	Flag = "ac_collectfrom",
-	Options = stageOptions,
-	CurrentOption = "Stage " .. savedCollectFrom,
+local rarityDropdown = {Tab:CreateDropdown({
+	Name = "Rarity Collect",
+	Description = "Only collect selected rarities",
+	Flag = "ac_rarity",
+	Options = rarityList,
+	MultipleOptions = true,
+	CurrentOption = rarityInit,
 	Callback = function(sel)
-		local pick = sel
-		if type(pick) == "table" then pick = pick[1] end
-		local n = tonumber(tostring(pick):match("%d+"))
-		if not n then return end
-		S.collectFrom = n
-		logf("UI", "Collect From Stage = " .. n, true)
-		notify("Collect", "Auto Collect mulai dari Stage " .. n)
+		local t = normRarity(sel)
+		if t == nil then return end
+		S.rarity = t
+		local names = {}
+		for k in pairs(t) do table.insert(names, k) end
+		logf("UI", "Rarity Collect selected: " .. table.concat(names, ","), true)
 	end
-})
+})}
+
+task.delay(1.5, function()
+	if not running() then return end
+	for _, o in ipairs(rarityDropdown) do
+		if type(o) == "table" and o.CurrentOption ~= nil then
+			local t = normRarity(o.CurrentOption)
+			if t then
+				S.rarity = t
+				local names = {}
+				for k in pairs(t) do table.insert(names, k) end
+				logf("Init", "Rarity Collect synced with dropdown: " .. (#names > 0 and table.concat(names, ",") or "(empty)"), true)
+			end
+			break
+		end
+	end
+end)
 
 Tab:CreateToggle({
 	Name = "Auto Collect",
-	Description = "Mob 0 -> ambil semua drop (teleport instant) -> drop 0 -> mob kembali = lanjut stage",
+	Description = "Pick up drops automatically",
 	Flag = "ac_collect",
 	CurrentValue = false,
 	Callback = function(v)
@@ -1120,39 +1383,40 @@ Tab:CreateToggle({
 	end
 })
 
-Tab:CreateDropdown({
-	Name = "Rarity",
-	Description = "Pilih rarity yang diambil",
-	Flag = "ac_rarity",
-	Options = rarityList,
-	MultipleOptions = true,
-	CurrentOption = rarityList,
-	Callback = function(sel)
-		local t = {}
-		if type(sel) == "table" then
-			for k, v in pairs(sel) do
-				if type(k) == "number" then t[tostring(v)] = true
-				elseif v then t[k] = true end
-			end
-		elseif type(sel) == "string" then
-			t[sel] = true
-		end
-		S.rarity = t
-		local names = {}
-		for k in pairs(t) do table.insert(names, k) end
-		logf("UI", "Rarity dipilih: " .. table.concat(names, ","), true)
+Tab:CreateToggle({
+	Name = "Take Enchant Material",
+	Description = "Always pick up Star Dust & Comet Core",
+	Flag = "ac_collectmaterials",
+	CurrentValue = true,
+	Callback = function(v)
+		S.collectMaterials = v
+		logf("UI", "Take Enchant Material " .. (v and "ON" or "OFF"), true)
 	end
 })
 
 Tab:CreateToggle({
-	Name = "Return saat Bag Penuh",
-	Description = "Bag penuh & ada loot bagus -> teleport instant ke base lalu ulang dari Stage 1. Mati = tukar item saja",
+	Name = "Return (Bag Full / Low HP)",
+	Description = "Go to base on full bag or low HP",
 	Flag = "ac_returnfull",
 	CurrentValue = true,
 	Callback = function(v)
 		S.returnOnFull = v
-		logf("UI", "Return saat Bag Penuh " .. (v and "ON" or "OFF"), true)
+		logf("UI", "Return (Bag Full / Low HP) " .. (v and "ON" or "OFF"), true)
 		if not v then S.bagFull = false end
+	end
+})
+
+Tab:CreateSlider({
+	Name = "Return if HP below",
+	Description = "Return when HP is under this value",
+	Flag = "ac_returnhp",
+	Range = {1, 50},
+	Increment = 1,
+	CurrentValue = 20,
+	Callback = function(v)
+		S.returnHP = v
+		if S.hp and S.hp >= v then S.hpArmed = true end
+		logf("UI", "Return if HP < " .. v, true)
 	end
 })
 
@@ -1160,34 +1424,23 @@ Tab:CreateSection({Name = "Base"})
 
 Tab:CreateButton({
 	Name = "Set Base",
-	Description = "Simpan posisi sekarang sebagai base",
+	Description = "Save current position as base",
 	Interact = "Set",
 	Callback = function()
 		local hrp = getHRP()
 		if hrp then
 			S.base = hrp.Position
-			notify("Base", "Posisi base disimpan")
+			notify("Base", "Base position saved")
 		end
 	end
 })
 
-Tab:CreateToggle({
-	Name = "Warp ke Camp",
-	Description = "Kirim Warp 0 setelah sampai base",
-	Flag = "ac_warp",
-	CurrentValue = true,
-	Callback = function(v)
-		S.useWarp = v
-		logf("UI", "Warp ke Camp " .. (v and "ON" or "OFF"), true)
-	end
-})
-
 Tab:CreateButton({
-	Name = "Kembali ke Base",
-	Description = "Teleport instant ke base lalu ulang dari Stage 1",
+	Name = "Return to Base",
+	Description = "Teleport to base",
 	Interact = "Go",
 	Callback = function()
-		logf("UI", "Tombol Kembali ke Base", true)
+		logf("UI", "Return to Base button", true)
 		task.spawn(function()
 			S.bagFull = true
 			returnToBase()
@@ -1196,5 +1449,5 @@ Tab:CreateButton({
 })
 
 if not MobsMod then
-	notify("Mobs", "Module Client.Mobs tidak bisa di-require, pakai mode scan folder FxLocal.Mobs")
+	notify("Mobs", "Client.Mobs module cannot be required, using FxLocal.Mobs folder scan")
 end
