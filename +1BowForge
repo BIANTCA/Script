@@ -35,7 +35,7 @@ local function setState(txt)
 	end
 end
 
-local BulbGui = loadstring(game:HttpGet('https://pastebin.com/raw/2BGUWvbd'))()
+local BulbGui = loadstring(game:HttpGet('https://pastebin.com/raw/kMrXLdJd'))()
 local Gui = BulbGui:Init({
 	Name = "+1 Bow Forge",
 	Subtitle = "Pala Bapak Kau",
