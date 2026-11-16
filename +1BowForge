@@ -129,7 +129,11 @@ local extraRarity = {
 	ThiefSack = "Legendary",
 }
 
+local farmModes = {"Auto Combat", "Auto Train"}
+
 local S = {
+	farm = false,
+	mode = "Auto Combat",
 	combat = false,
 	collect = false,
 	boss = false,
@@ -219,6 +223,23 @@ local function readSavedFlag(flag)
 		end
 	end)
 	return v
+end
+
+local function normMode(sel)
+	if type(sel) == "table" then
+		if sel.CurrentOption ~= nil then sel = sel.CurrentOption end
+		if type(sel) == "table" then sel = sel[1] end
+	end
+	for _, m in ipairs(farmModes) do
+		if m == sel then return m end
+	end
+	return nil
+end
+
+do
+	local savedMode = normMode(readSavedFlag("ac_farmmode"))
+	if savedMode then S.mode = savedMode end
+	logf("Init", "Farm Mode: " .. S.mode, true)
 end
 
 local rarityInit = rarityList
@@ -831,30 +852,18 @@ local function findTrainPad(r)
 	return pad
 end
 
-local combatToggle, trainToggle
-
-local function setToggleUI(ret, v)
-	if type(ret) ~= "table" then return end
-	for _, o in ipairs(ret) do
-		if type(o) == "table" then
-			for _, fn in ipairs({"Set", "SetValue"}) do
-				if type(o[fn]) == "function" then
-					pcall(o[fn], o, v)
-					return
-				end
-			end
-		end
+local function applyFarm()
+	local wasTrain = S.train
+	S.combat = S.farm and S.mode == "Auto Combat"
+	S.train = S.farm and S.mode == "Auto Train"
+	if not S.combat then
+		current = nil
+		cancelTween()
 	end
-end
-
-local function offBoth()
-	S.combat = false
-	S.train = false
-	current = nil
-	cancelTween()
-	setToggleUI(combatToggle, false)
-	setToggleUI(trainToggle, false)
-	notify("Warning", "Auto Combat & Auto Train both on, both turned off")
+	if S.train and not wasTrain then
+		resetStage()
+	end
+	logf("Farm", "Farm=" .. tostring(S.farm) .. " Mode=" .. S.mode, true)
 end
 
 task.spawn(function()
@@ -863,10 +872,6 @@ task.spawn(function()
 
 	while running() do
 		task.wait(0.05)
-
-		if S.train and S.combat then
-			offBoth()
-		end
 
 		if not S.train then
 			range = nil
@@ -957,7 +962,7 @@ task.spawn(function()
 			cancelTween()
 			current = nil
 			wasActive = false
-			setState(S.train and "Auto Train active" or "Idle (Auto Combat & Auto Collect off)")
+			setState(S.train and "Auto Train active" or "Idle (Auto Farm & Auto Collect off)")
 			continue
 		end
 		if not wasActive then
@@ -1203,6 +1208,7 @@ task.spawn(function()
 		local idleT = math.max(0, os.clock() - lastCollectTP)
 		local confT = clearSince and math.max(0, os.clock() - clearSince) or 0
 		local txt = "Status: " .. stateText
+			.. "\nMode: " .. S.mode .. " (" .. (S.farm and "ON" or "OFF") .. ")"
 			.. "\nStage: " .. tostring(stageIdx or "-") .. "/" .. S.stageMax .. "  |  Mob: " .. mobs .. "  |  HP: " .. tostring(S.hp and math.floor(S.hp) or "-") .. " (limit " .. S.returnHP .. ")"
 			.. "\nTrain: " .. trainInfo
 			.. "\nRarity drops: " .. pend .. " (total read " .. countDrops() .. ")  |  Bag: " .. #bagList .. "/" .. bagSize
@@ -1216,21 +1222,21 @@ task.spawn(function()
 	end
 end)
 
-Tab:CreateSection({Name = "Auto Combat"})
+Tab:CreateSection({Name = "Auto Farm"})
 
-combatToggle = {Tab:CreateToggle({
-	Name = "Auto Combat",
-	Description = "Kill mobs automatically",
-	Flag = "ac_combat",
-	CurrentValue = false,
-	Callback = function(v)
-		if v and S.train then
-			offBoth()
-			return
-		end
-		S.combat = v
-		logf("UI", "Auto Combat " .. (v and "ON" or "OFF"), true)
-		if v then
+Tab:CreateDropdown({
+	Name = "Farm Mode",
+	Description = "Choose what Auto Farm does",
+	Flag = "ac_farmmode",
+	Options = farmModes,
+	CurrentOption = S.mode,
+	Callback = function(sel)
+		local m = normMode(sel)
+		if not m then return end
+		S.mode = m
+		logf("UI", "Farm Mode = " .. m, true)
+		applyFarm()
+		if S.farm and S.combat then
 			local hrp = getHRP()
 			if hrp then
 				if not S.base then S.base = hrp.Position end
@@ -1239,12 +1245,45 @@ combatToggle = {Tab:CreateToggle({
 					notify("Stage", "At base, starting from Stage " .. S.stageStart)
 				end
 			end
-		else
-			current = nil
-			cancelTween()
 		end
 	end
-})}
+})
+
+Tab:CreateToggle({
+	Name = "Enable Auto Farm",
+	Description = "Run the mode selected above",
+	Flag = "ac_farm",
+	CurrentValue = false,
+	Callback = function(v)
+		S.farm = v
+		logf("UI", "Auto Farm " .. (v and "ON" or "OFF"), true)
+		applyFarm()
+		if v and S.combat then
+			local hrp = getHRP()
+			if hrp then
+				if not S.base then S.base = hrp.Position end
+				if nearHome(hrp.Position) then
+					resetStage()
+					notify("Stage", "At base, starting from Stage " .. S.stageStart)
+				end
+			end
+		end
+	end
+})
+
+Tab:CreateToggle({
+	Name = "Auto Rebirth",
+	Description = "Rebirth automatically when able",
+	Flag = "ac_rebirth",
+	CurrentValue = false,
+	Callback = function(v)
+		S.autoRebirth = v
+		logf("UI", "Auto Rebirth " .. (v and "ON" or "OFF"), true)
+		if v and not (StateMod and Economy) then
+			notify("Rebirth", "State/Economy module not found, Auto Rebirth cannot check Level")
+		end
+	end
+})
 
 Tab:CreateSlider({
 	Name = "Mob Distance",
@@ -1273,41 +1312,6 @@ Tab:CreateButton({
 		logf("UI", "Reset Stage button", true)
 		resetStage()
 		notify("Stage", "Reset, starting from Stage " .. S.stageStart)
-	end
-})
-
-Tab:CreateSection({Name = "Auto Train"})
-
-trainToggle = {Tab:CreateToggle({
-	Name = "Auto Train",
-	Description = "Stand on the Pad matching your Rebirth",
-	CurrentValue = false,
-	Callback = function(v)
-		if v and S.combat then
-			offBoth()
-			return
-		end
-		S.train = v
-		logf("UI", "Auto Train " .. (v and "ON" or "OFF"), true)
-		if v then
-			resetStage()
-		end
-	end
-})}
-
-Tab:CreateSection({Name = "Auto Rebirth"})
-
-Tab:CreateToggle({
-	Name = "Auto Rebirth",
-	Description = "Rebirth automatically when able",
-	Flag = "ac_rebirth",
-	CurrentValue = false,
-	Callback = function(v)
-		S.autoRebirth = v
-		logf("UI", "Auto Rebirth " .. (v and "ON" or "OFF"), true)
-		if v and not (StateMod and Economy) then
-			notify("Rebirth", "State/Economy module not found, Auto Rebirth cannot check Level")
-		end
 	end
 })
 
