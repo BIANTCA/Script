@@ -43,12 +43,55 @@ local Gui = BulbGui:Init({
 	FileName = "autocombat.json"
 })
 
-local function notify(title, content)
-	logf("Notify", title .. ": " .. content)
+local notifFuncs = {
+	{"Farm",    "Auto Farm"},
+	{"Stage",   "Auto Stage"},
+	{"Train",   "Auto Train"},
+	{"Rebirth", "Auto Rebirth"},
+	{"Enhance", "Auto Enhance"},
+	{"Forge",   "Auto Forge"},
+	{"Collect", "Auto Collect"},
+	{"Return",  "Return (Bag Full / Low HP)"},
+}
+
+local muted = {}
+local muteAll = false
+local uiReady = false
+local lastNotif = {}
+local uiDebounce = {}
+
+local function rawNotify(title, content, dur)
 	pcall(function()
-		Gui:Notify({Title = title, Content = content, Duration = 3})
+		Gui:Notify({Title = title, Content = content, Duration = dur or 3})
 	end)
 end
+
+local function notify(key, title, content, dur)
+	logf("Notify", "[" .. key .. "] " .. title .. ": " .. content)
+	if muteAll or muted[key] then return end
+	local sig = key .. "|" .. title .. "|" .. content
+	local now = os.clock()
+	if lastNotif[sig] and now - lastNotif[sig] < 2 then return end
+	lastNotif[sig] = now
+	rawNotify(title, content, dur)
+end
+
+local function uiNotify(key, title, content)
+	if uiReady then notify(key, title, content, 2) end
+end
+
+local function uiNotifyD(id, key, title, content)
+	if not uiReady then return end
+	uiDebounce[id] = (uiDebounce[id] or 0) + 1
+	local n = uiDebounce[id]
+	task.delay(0.6, function()
+		if uiDebounce[id] == n and running() then
+			notify(key, title, content, 2)
+		end
+	end)
+end
+
+local function onOff(v) return v and "ON" or "OFF" end
 
 local Shared = RS:FindFirstChild("Shared")
 local Craft, Net
@@ -130,6 +173,11 @@ local extraRarity = {
 }
 
 local farmModes = {"Auto Combat", "Auto Train"}
+local forgeTypes = {"Bow", "Armour"}
+local forgeWorseModes = {"Sell", "Keep"}
+
+local forgeMinLoot = (Craft and tonumber(Craft.MIN)) or 4
+local forgeMaxLoot = (Craft and tonumber(Craft.MAX)) or 16
 
 local S = {
 	farm = false,
@@ -145,7 +193,6 @@ local S = {
 	rarity = {},
 	bagFull = false,
 	returning = false,
-	base = nil,
 	useWarp = true,
 	returnOnFull = true,
 	collectMaterials = true,
@@ -154,6 +201,18 @@ local S = {
 	hpArmed = true,
 	train = false,
 	trainRate = 1,
+	enhance = false,
+	enhanceTarget = 10,
+	enhSlots = {bow = true, quiver = false, cloak = false},
+	enhanceScroll = false,
+	scrollBelow = 70,
+	enhanceDelay = 0.5,
+	autoForge = false,
+	forgeType = "Bow",
+	forgeLoot = forgeMaxLoot,
+	forgeWorse = "Sell",
+	forgeDelay = 1,
+	forgeTeleport = true,
 	stageStart = 1,
 	stageMax = 30,
 	clearDelay = 0.1,
@@ -170,6 +229,10 @@ local S = {
 for _, r in ipairs(rarityList) do S.rarity[r] = true end
 
 local trainInfo = "-"
+local enhanceStatus = "Off"
+local forgeStatus = "Off"
+local forging = false
+local enhStamp, profStamp, lastEnhanced = 0, 0, nil
 
 local function normRarity(sel)
 	if type(sel) == "table" then
@@ -225,21 +288,29 @@ local function readSavedFlag(flag)
 	return v
 end
 
-local function normMode(sel)
+local function normSingle(sel, list)
 	if type(sel) == "table" then
 		if sel.CurrentOption ~= nil then sel = sel.CurrentOption end
 		if type(sel) == "table" then sel = sel[1] end
 	end
-	for _, m in ipairs(farmModes) do
+	for _, m in ipairs(list) do
 		if m == sel then return m end
 	end
 	return nil
+end
+
+local function normMode(sel)
+	return normSingle(sel, farmModes)
 end
 
 do
 	local savedMode = normMode(readSavedFlag("ac_farmmode"))
 	if savedMode then S.mode = savedMode end
 	logf("Init", "Farm Mode: " .. S.mode, true)
+	local savedType = normSingle(readSavedFlag("ac_forgetype"), forgeTypes)
+	if savedType then S.forgeType = savedType end
+	local savedWorse = normSingle(readSavedFlag("ac_forgeworse"), forgeWorseModes)
+	if savedWorse then S.forgeWorse = savedWorse end
 end
 
 local rarityInit = rarityList
@@ -269,7 +340,7 @@ local function getHRP()
 end
 
 local function nearHome(pos)
-	for _, h in ipairs({S.base, S.camp, S.spawn}) do
+	for _, h in ipairs({S.camp, S.spawn}) do
 		if h and (pos - h).Magnitude <= S.homeRadius then return true end
 	end
 	return false
@@ -341,6 +412,7 @@ local function enhanceReport()
 				string.upper(slot), lv, lv + 1, chance, needF, fmtNum(needC), needD, needK, e.fails or 0, status)
 		end
 	end
+	table.insert(lines, 1, "Auto Enhance: " .. enhanceStatus)
 	return table.concat(lines, "\n")
 end
 
@@ -522,8 +594,29 @@ local function removeDrop(id)
 	skipLogged[id] = nil
 end
 
+local forgeStorage, forgeEquipped, forgeWorn, forgeResult = nil, nil, {}, nil
+local forgeStateStamp, forgeResultStamp, forgeChosenStamp = 0, 0, 0
+
+local function mergeAltar(d)
+	if type(d) ~= "table" then return end
+	if d.storage then forgeStorage = d.storage end
+	if d.equipped ~= nil then forgeEquipped = d.equipped end
+	if d.worn then forgeWorn = d.worn end
+end
+
 if Net and Net.Evt then
 	local c = Net.Evt.OnClientEvent:Connect(function(name, data)
+		if name == "AltarState" then
+			mergeAltar(data)
+			forgeStateStamp = forgeStateStamp + 1
+		elseif name == "AltarResult" and type(data) == "table" then
+			mergeAltar(data)
+			forgeResult = data
+			forgeResultStamp = forgeResultStamp + 1
+		elseif name == "AltarChosen" then
+			mergeAltar(data)
+			forgeChosenStamp = forgeChosenStamp + 1
+		end
 		if type(data) == "table" and data.hp
 			and (name == "PHit" or name == "S" or name == "Heal" or name == "Died" or name == "Warped" or name == "Floor") then
 			S.hp = tonumber(data.hp) or S.hp
@@ -552,11 +645,21 @@ if Net and Net.Evt then
 			if data.bagSize then bagSize = data.bagSize end
 			logf("Event", "Collected result=" .. tostring(data.result) .. " id=" .. tostring(data.id))
 			if data.result == "full" then
-				if S.returnOnFull then S.bagFull = true end
+				if S.returnOnFull then
+					S.bagFull = true
+				else
+					notify("Collect", "Bag Full", "Bag is full, cannot collect", 2)
+				end
 			elseif data.id then
+				local d = drops[data.id]
+				notify("Collect", "Collected", tostring(d and d.item or "item") .. " (" .. #bagList .. "/" .. bagSize .. ")", 1.5)
 				removeDrop(data.id)
 			end
+		elseif name == "Enhanced" and type(data) == "table" then
+			lastEnhanced = data
+			enhStamp = enhStamp + 1
 		elseif name == "Profile" and type(data) == "table" then
+			profStamp = profStamp + 1
 			if data.bag then bagList = data.bag end
 			if data.bagSize then bagSize = data.bagSize end
 			logf("Event", "Profile update bag " .. #bagList .. "/" .. bagSize)
@@ -568,6 +671,7 @@ if Net and Net.Evt then
 			bagList = {}
 			S.bagFull = false
 			S.returning = false
+			notify("Return", "Banked", "Bag emptied")
 		elseif name == "Room" then
 			logf("Event", "Room: reset all drops", true)
 			S.bagFull = false
@@ -582,16 +686,18 @@ else
 	logf("Init", "Net.Evt not found, drops only from client sync", true)
 end
 
+-- reason: "hp" | "bag"
 local function returnToBase(reason)
 	if S.returning then return end
 	S.returning = true
-	setState("Returning to base (" .. (reason == "hp" and "low HP" or "bag full") .. ", instant teleport)")
-	cancelTween()
-	local hrp = getHRP()
-	if hrp and S.base then
-		tpTo(CFrame.new(S.base), hrp)
-		task.wait(0.1)
+	local label = (reason == "hp" and "low HP") or "bag full"
+	setState("Returning (" .. label .. ")")
+	if reason == "hp" then
+		notify("Return", "Return", "HP " .. math.floor(S.hp or 0) .. " below " .. S.returnHP .. ", returning")
+	else
+		notify("Return", "Return", "Bag full, returning")
 	end
+	cancelTween()
 	if S.useWarp then fireCmd("Warp", 0) end
 	local t0 = os.clock()
 	while S.bagFull and os.clock() - t0 < 6 and running() do
@@ -611,7 +717,8 @@ local function returnToBase(reason)
 		local h = getHRP()
 		if h then S.camp = h.Position end
 	end
-	logf("Base", "Return finished", true)
+	logf("Return", "Return finished", true)
+	notify("Return", "Return", "Return finished" .. (reason == "hp" and ", HP recovered" or ""))
 	if resetStage then resetStage() end
 end
 
@@ -706,6 +813,9 @@ local function collectDrop(d, mode, hrp)
 	clearSince = nil
 	setState("Collecting: " .. tostring(d.item) .. " [" .. mode .. "]")
 	logf("Collect", "Pick #" .. tostring(d.id) .. " " .. tostring(d.item) .. " mode=" .. mode)
+	if mode == "swap" then
+		notify("Collect", "Swap", "Swapping lowest bag item for " .. tostring(d.item), 2)
+	end
 	local stand = Vector3.new(d.x, groundY(d.x, d.z, hrp) + 3, d.z)
 	local flat = (Vector3.new(d.x, 0, d.z) - Vector3.new(hrp.Position.X, 0, hrp.Position.Z)).Magnitude
 	local reach = d.auto and 4 or (pickupRange - 4)
@@ -778,7 +888,7 @@ local function advanceStage()
 	if stageIdx >= S.stageMax then
 		stageDone = true
 		setState("Finished: stage limit " .. stageIdx)
-		notify("Stage", "Stage " .. stageIdx .. " finished (max limit)")
+		notify("Stage", "Stage", "Stage " .. stageIdx .. " finished (max limit)")
 	else
 		stageIdx = stageIdx + 1
 		needTravel = true
@@ -786,7 +896,7 @@ local function advanceStage()
 		table.clear(asked)
 		table.clear(skipLogged)
 		setState("Next: Stage " .. stageIdx)
-		notify("Stage", "Moving to Stage " .. stageIdx)
+		notify("Stage", "Stage", "Moving to Stage " .. stageIdx)
 	end
 end
 
@@ -797,10 +907,11 @@ table.insert(env.__AC_CONNS, lp.CharacterAdded:Connect(function(char)
 	task.wait(0.5)
 	S.spawn = hrp.Position
 	current = nil
+	forging = false
 	cancelTween()
 	resetStage()
 	if S.combat then
-		notify("Stage", "Respawned at base, starting from Stage " .. S.stageStart)
+		notify("Stage", "Stage", "Respawned, starting from Stage " .. S.stageStart)
 	end
 end))
 
@@ -853,7 +964,7 @@ local function findTrainPad(r)
 end
 
 local function applyFarm()
-	local wasTrain = S.train
+	local wasTrain, wasCombat = S.train, S.combat
 	S.combat = S.farm and S.mode == "Auto Combat"
 	S.train = S.farm and S.mode == "Auto Train"
 	if not S.combat then
@@ -862,6 +973,14 @@ local function applyFarm()
 	end
 	if S.train and not wasTrain then
 		resetStage()
+		uiNotify("Train", "Auto Train", "Started")
+	elseif wasTrain and not S.train then
+		uiNotify("Train", "Auto Train", "Stopped")
+	end
+	if S.combat and not wasCombat then
+		uiNotify("Stage", "Auto Combat", "Started (Auto Stage active)")
+	elseif wasCombat and not S.combat then
+		uiNotify("Stage", "Auto Combat", "Stopped")
 	end
 	logf("Farm", "Farm=" .. tostring(S.farm) .. " Mode=" .. S.mode, true)
 end
@@ -882,6 +1001,7 @@ task.spawn(function()
 
 		local hrp, hum = getHRP()
 		if not (hrp and hum and hum.Health > 0) then continue end
+		if forging then continue end
 
 		local now = os.clock()
 
@@ -895,9 +1015,10 @@ task.spawn(function()
 			if r ~= range then
 				if range then
 					logf("Train", "Rebirth " .. tostring(rb) .. " -> moving to Range " .. r.name .. " (min rebirth " .. r.min .. ")", true)
-					notify("Train", "Rebirth " .. tostring(rb) .. ", moving to Range " .. r.name)
+					notify("Train", "Train", "Rebirth " .. tostring(rb) .. ", moving to Range " .. r.name)
 				else
 					logf("Train", "Rebirth " .. tostring(rb) .. " -> Range " .. r.name .. " (min rebirth " .. r.min .. ")", true)
+					notify("Train", "Train", "Training at Range " .. r.name .. " (Rebirth " .. tostring(rb) .. ")")
 				end
 				range = r
 			end
@@ -908,6 +1029,7 @@ task.spawn(function()
 		if not pad then
 			trainInfo = range.model .. " Pad not found"
 			logf("Train", "Pad " .. range.model .. "_Pad__Color not found in SkyIslesLobby_Redesign")
+			notify("Train", "Train", "Pad for Range " .. range.name .. " not found")
 			continue
 		end
 
@@ -928,22 +1050,358 @@ task.spawn(function()
 	end
 end)
 
+local enhSlotOrder = {"bow", "quiver", "cloak"}
+local enhBlocked = {}
+local scrollBlockedUntil = 0
+
+local function enhMaxLevel(rb)
+	local m = 15
+	if Enchant and Enchant.maxLevel then
+		local ok, v = pcall(Enchant.maxLevel, rb)
+		if ok and type(v) == "number" then m = v end
+	end
+	return m
+end
+
+task.spawn(function()
+	local lastAttempt = 0
+	local doneNotified = false
+
+	while running() do
+		task.wait(0.2)
+
+		if not S.enhance then
+			enhanceStatus = "Off"
+			doneNotified = false
+			continue
+		end
+
+		local prof = StateMod and StateMod.profile
+		if not (prof and type(prof.enhance) == "table") then
+			enhanceStatus = "Waiting for profile data"
+			continue
+		end
+
+		local now = os.clock()
+		if now - lastAttempt < S.enhanceDelay then continue end
+
+		local rb = prof.rebirths or 0
+		local openAt = Economy and Economy.RebirthUnlocks and Economy.RebirthUnlocks.mira
+		if openAt and rb < openAt then
+			enhanceStatus = "Enchant unlocks at Rebirth " .. openAt
+			continue
+		end
+
+		local cap = math.min(S.enhanceTarget, enhMaxLevel(rb))
+		local mats = prof.materials or {}
+		local feathers, coins = prof.feathers or 0, prof.coins or 0
+		local dust, core = mats.StarDust or 0, mats.CometCore or 0
+		local scrolls = prof.scrolls or 0
+
+		local picked
+		local notes = {}
+		local reachedTarget, selected = 0, 0
+		for _, slot in ipairs(enhSlotOrder) do
+			if S.enhSlots[slot] then
+				selected = selected + 1
+				local e = prof.enhance[slot]
+				local cost = type(e) == "table" and e.cost or {}
+				if type(e) ~= "table" or e.uid == nil then
+					notes[#notes + 1] = slot .. ": empty"
+				elseif (enhBlocked[slot] or 0) > now then
+					notes[#notes + 1] = slot .. ": on hold"
+				elseif (e.level or 0) >= cap then
+					reachedTarget = reachedTarget + 1
+					notes[#notes + 1] = slot .. ": +" .. (e.level or 0) .. " (target " .. cap .. ")"
+				elseif feathers < (cost[1] or 0) then
+					notes[#notes + 1] = slot .. ": need Feather"
+				elseif coins < (cost[2] or 0) then
+					notes[#notes + 1] = slot .. ": need Coins"
+				elseif dust < (e.dust or 0) then
+					notes[#notes + 1] = slot .. ": need Star Dust"
+				elseif core < (e.core or 0) then
+					notes[#notes + 1] = slot .. ": need Comet Core"
+				else
+					picked = slot
+					break
+				end
+			end
+		end
+
+		if not picked then
+			enhanceStatus = #notes > 0 and table.concat(notes, " | ") or "Select a slot to enhance"
+			if selected > 0 and reachedTarget == selected and not doneNotified then
+				doneNotified = true
+				notify("Enhance", "Enhance", "All selected slots reached target +" .. cap)
+			end
+			continue
+		end
+		doneNotified = false
+
+		local e = prof.enhance[picked]
+		local chance = e.chance or 1
+		local useScroll = S.enhanceScroll and now >= scrollBlockedUntil and scrolls > 0
+			and chance < 1 and chance * 100 <= S.scrollBelow
+		lastAttempt = now
+		enhanceStatus = string.format("Enhancing %s +%d -> +%d (%d%%)%s",
+			picked, e.level or 0, (e.level or 0) + 1, math.floor(chance * 100 + 0.5), useScroll and " + scroll" or "")
+
+		local before = enhStamp
+		fireCmd("Enhance", e.uid, useScroll and true or false)
+		local t0 = os.clock()
+		while enhStamp == before and os.clock() - t0 < 3 and running() do
+			task.wait(0.05)
+		end
+
+		if enhStamp == before then
+			enhBlocked[picked] = os.clock() + 3
+			logf("Enhance", "No Enhanced reply from server", true)
+			notify("Enhance", "Enhance", picked .. ": no reply from server")
+		else
+			local r = lastEnhanced
+			if type(r) == "table" then
+				if r.ok then
+					logf("Enhance", string.format("%s +%s -> +%s %s%s", picked, tostring(r.from), tostring(r.level),
+						r.success and "SUCCESS" or "FAILED", r.scroll and " (scroll)" or ""), true)
+					notify("Enhance", r.success and "Enhance Success" or "Enhance Failed",
+						string.format("%s +%s -> +%s%s", string.upper(picked), tostring(r.from), tostring(r.level),
+							r.scroll and " (scroll used)" or ""), 2)
+				else
+					logf("Enhance", picked .. " rejected: " .. tostring(r.why), true)
+					notify("Enhance", "Enhance Rejected", picked .. ": " .. tostring(r.why), 2)
+					if r.why == "scroll" then
+						scrollBlockedUntil = os.clock() + 30
+					else
+						enhBlocked[picked] = os.clock() + 5
+					end
+				end
+			end
+		end
+
+		local pb = profStamp
+		local t1 = os.clock()
+		while profStamp == pb and os.clock() - t1 < 0.4 and running() do
+			task.wait(0.05)
+		end
+		if profStamp == pb then
+			fireCmd("Profile")
+			t1 = os.clock()
+			while profStamp == pb and os.clock() - t1 < 1.2 and running() do
+				task.wait(0.05)
+			end
+		end
+		task.wait(0.15)
+	end
+end)
+
+-- Auto Forge: Cmd AltarOpen -> AltarAdd -> AltarCraft/AltarArmour (slots, nil, nil) -> event AltarResult -> Cmd AltarChoose (uid, equip|sell|keep)
+local function waitStamp(getter, before, timeout)
+	local t0 = os.clock()
+	while getter() == before and os.clock() - t0 < timeout and running() do
+		task.wait(0.05)
+	end
+	return getter() ~= before
+end
+
+local function forgeBenchCF()
+	local bench = workspace:FindFirstChild("CraftingBench")
+	if not (bench and bench:IsA("Model")) then return nil end
+	local stance = bench:FindFirstChild("Stance")
+	if stance and stance:IsA("BasePart") then
+		return CFrame.new(stance.Position - Vector3.new(0, stance.Size.Y / 2, 0) + Vector3.new(0, 3, 0))
+	end
+	return bench:GetPivot() * CFrame.new(3.8, 3.6, 3.9)
+end
+
+local function forgePickSlots(storage, want)
+	local slots
+	if Craft and type(Craft.bestFill) == "function" then
+		local ok, res = pcall(Craft.bestFill, storage, want)
+		if ok and type(res) == "table" and #res > 0 then slots = res end
+	end
+	if slots then return slots end
+	local list = {}
+	for id, n in pairs(storage) do
+		if Craft and Craft.Essences and Craft.Essences[id] and n > 0 then
+			list[#list + 1] = {id = id, n = n}
+		end
+	end
+	table.sort(list, function(a, b) return a.n > b.n end)
+	slots = {}
+	local left = want
+	local maxKinds = (Craft and tonumber(Craft.SLOTS)) or 4
+	for _, e in ipairs(list) do
+		if left <= 0 or #slots >= maxKinds then break end
+		local take = math.min(e.n, left)
+		slots[#slots + 1] = {id = e.id, n = take}
+		left = left - take
+	end
+	if left > 0 then return nil end
+	return slots
+end
+
+local function forgeStep()
+	if not S.autoForge then
+		forgeStatus = "Off"
+		return
+	end
+	if S.returning or S.bagFull then
+		forgeStatus = "Paused (returning)"
+		return
+	end
+	if not Cmd then
+		forgeStatus = "Cmd remote not found"
+		return
+	end
+	if not Craft then
+		forgeStatus = "Craft module not found"
+		return
+	end
+	local hrp, hum = getHRP()
+	if not (hrp and hum and hum.Health > 0) then
+		forgeStatus = "Waiting for character"
+		return
+	end
+
+	local isArmour = S.forgeType == "Armour"
+
+	local b = forgeStateStamp
+	Cmd:FireServer("AltarOpen")
+	if not waitStamp(function() return forgeStateStamp end, b, 3) then
+		forgeStatus = "No reply from server (AltarOpen)"
+		return
+	end
+
+	local storage = forgeStorage
+	if type(storage) ~= "table" then
+		forgeStatus = "Storage not loaded"
+		return
+	end
+	if isArmour and Craft.ASK_PIECE and (storage[Craft.ASK_PIECE] or 0) > 0 then
+		storage = table.clone(storage)
+		storage[Craft.ASK_PIECE] = nil
+	end
+
+	local total = 0
+	for id, n in pairs(storage) do
+		if Craft.Essences and Craft.Essences[id] then total = total + n end
+	end
+	local want = math.clamp(S.forgeLoot, forgeMinLoot, forgeMaxLoot)
+	if total < want then
+		forgeStatus = "Waiting for loot (" .. total .. "/" .. want .. ")"
+		return
+	end
+
+	local slots = forgePickSlots(storage, want)
+	if not slots then
+		forgeStatus = "Cannot build loot set"
+		return
+	end
+
+	forging = true
+	cancelTween()
+	current = nil
+	local backCF
+	if S.forgeTeleport then
+		local cf = forgeBenchCF()
+		if cf then
+			backCF = hrp.CFrame
+			forgeStatus = "Teleporting to Crafting Bench"
+			tpTo(cf, hrp)
+			task.wait(0.4)
+		end
+	end
+
+	forgeStatus = "Forging (" .. S.forgeType .. ", " .. want .. " Loot)"
+	local b2 = forgeStateStamp
+	Cmd:FireServer("AltarOpen")
+	waitStamp(function() return forgeStateStamp end, b2, 3)
+	Cmd:FireServer("AltarAdd")
+	task.wait(0.1)
+
+	forgeResult = nil
+	local rb = forgeResultStamp
+	Cmd:FireServer(isArmour and "AltarArmour" or "AltarCraft", slots, nil, nil)
+	local got = waitStamp(function() return forgeResultStamp end, rb, 10)
+	local r = forgeResult
+	local rec = r and (r.bow or r.armour)
+
+	if got and rec and rec.uid ~= nil then
+		local better
+		if isArmour or r.armour then
+			local cur = forgeWorn and rec.slot and forgeWorn[rec.slot]
+			if not cur then
+				better = true
+			elseif Craft.armourValue then
+				local okA, a = pcall(Craft.armourValue, rec)
+				local okB, c = pcall(Craft.armourValue, cur)
+				better = okA and okB and a > c
+			end
+		else
+			better = forgeEquipped == nil or (tonumber(rec.power) or 0) > (tonumber(forgeEquipped.power) or 0)
+		end
+		local choice = better and "equip" or (S.forgeWorse == "Sell" and "sell" or "keep")
+		local cb = forgeChosenStamp
+		Cmd:FireServer("AltarChoose", rec.uid, choice)
+		waitStamp(function() return forgeChosenStamp end, cb, 2)
+		forgeStatus = string.format("Forged %s [%s] -> %s", tostring(rec.name or "item"), tostring(rec.rarity or "?"), choice)
+		logf("Forge", forgeStatus, true)
+		notify("Forge", "Forge", string.format("%s [%s] -> %s", tostring(rec.name or "item"), tostring(rec.rarity or "?"), choice), 2)
+	else
+		forgeStatus = "Forge failed or no result"
+		logf("Forge", "No AltarResult (rejected or timeout)", true)
+		notify("Forge", "Forge", "Forge failed or no result from server", 2)
+		task.wait(1)
+	end
+
+	if backCF then
+		local h2 = getHRP()
+		if h2 then
+			h2.CFrame = backCF
+			h2.AssemblyLinearVelocity = Vector3.zero
+		end
+	end
+	forging = false
+end
+
+task.spawn(function()
+	local lastCycle = 0
+	while running() do
+		task.wait(0.2)
+		if not S.autoForge then
+			forgeStatus = "Off"
+			forging = false
+			continue
+		end
+		if os.clock() - lastCycle < S.forgeDelay then continue end
+		local ok, err = pcall(forgeStep)
+		if not ok then
+			forging = false
+			forgeStatus = "Error: " .. tostring(err)
+			logf("Forge", "Error: " .. tostring(err), true)
+		end
+		lastCycle = os.clock()
+	end
+end)
+
 task.spawn(function()
 	while running() do
 		task.wait(1)
-		if S.autoRebirth and not S.returning and canRebirthNow() then
+		if S.autoRebirth and not S.returning and not forging and canRebirthNow() then
 			setState("Rebirth: attempting rebirth")
+			notify("Rebirth", "Rebirth", "Attempting rebirth...", 2)
 			local before = (StateMod.profile.rebirths or 0)
 			fireCmd("Rebirth")
 			task.wait(3)
 			local prof = StateMod.profile
 			if prof and (prof.rebirths or 0) > before then
-				notify("Rebirth", "Rebirth " .. prof.rebirths .. " successful, starting from Stage " .. S.stageStart)
+				notify("Rebirth", "Rebirth", "Rebirth " .. prof.rebirths .. " successful, starting from Stage " .. S.stageStart)
 				current = nil
 				cancelTween()
 				resetStage()
 			else
 				logf("Rebirth", "Rebirth failed, retrying in 5 seconds", true)
+				notify("Rebirth", "Rebirth", "Rebirth failed, retrying in 5 seconds")
 				task.wait(5)
 			end
 		end
@@ -978,6 +1436,12 @@ task.spawn(function()
 			continue
 		end
 
+		if forging then
+			current = nil
+			setState("Forging")
+			continue
+		end
+
 		if S.bagFull then
 			current = nil
 			returnToBase("bag")
@@ -987,8 +1451,7 @@ task.spawn(function()
 
 		if S.returnOnFull and S.combat and S.hpArmed and S.hp and S.hp > 0
 			and S.hp < S.returnHP and not S.returning then
-			logf("HP", "HP " .. S.hp .. " < " .. S.returnHP .. ", returning to base", true)
-			notify("Return", "HP " .. math.floor(S.hp) .. " below " .. S.returnHP .. ", returning to base")
+			logf("HP", "HP " .. S.hp .. " < " .. S.returnHP .. ", returning", true)
 			current = nil
 			S.hpArmed = false
 			returnToBase("hp")
@@ -1009,7 +1472,7 @@ task.spawn(function()
 					current = nil
 					cancelTween()
 					resetStage()
-					notify("Stage", "At base, starting from Stage " .. S.stageStart)
+					notify("Stage", "Stage", "Back at spawn, starting from Stage " .. S.stageStart)
 					continue
 				end
 			end
@@ -1022,6 +1485,7 @@ task.spawn(function()
 				stageIdx = math.clamp(S.stageStart, 1, 30)
 				needTravel = true
 				logf("Stage", "Starting from Stage " .. stageIdx, true)
+				notify("Stage", "Stage", "Starting from Stage " .. stageIdx)
 			end
 			if needTravel then
 				needTravel = false
@@ -1031,7 +1495,7 @@ task.spawn(function()
 				else
 					stageBroken = true
 					setState(string.format("Error: Stage%02d not found", stageIdx))
-					notify("Stage", string.format("Stage%02d not found in Workspace, Auto Stage skipped", stageIdx))
+					notify("Stage", "Stage", string.format("Stage%02d not found in Workspace, Auto Stage skipped", stageIdx))
 				end
 				continue
 			end
@@ -1080,7 +1544,7 @@ task.spawn(function()
 				end
 				if stageActive and seenMob and emptySince
 					and now - math.max(emptySince, lastCollectTP) >= S.collectIdle then
-					notify("Collect", "No teleport for " .. S.collectIdle .. "s, forcing next stage")
+					notify("Collect", "Collect", "No teleport for " .. S.collectIdle .. "s, forcing next stage")
 					advanceStage()
 				else
 					collectDrop(d, mode, hrp)
@@ -1109,7 +1573,7 @@ task.spawn(function()
 						cleared = true
 						clearSince = nil
 						if idleElapsed >= S.collectIdle then
-							notify("Collect", "No teleport for " .. S.collectIdle .. "s, forcing next stage")
+							notify("Collect", "Collect", "No teleport for " .. S.collectIdle .. "s, forcing next stage")
 							advanceStage()
 							continue
 						end
@@ -1137,7 +1601,7 @@ task.spawn(function()
 					emptyTries = emptyTries + 1
 					logf("Stage", "No mobs appeared (attempt " .. emptyTries .. "/2)", true)
 					if emptyTries >= 2 then
-						notify("Stage", "Stage " .. stageIdx .. " has no mobs, skipped")
+						notify("Stage", "Stage", "Stage " .. stageIdx .. " has no mobs, skipped")
 						advanceStage()
 					else
 						needTravel = true
@@ -1211,6 +1675,8 @@ task.spawn(function()
 			.. "\nMode: " .. S.mode .. " (" .. (S.farm and "ON" or "OFF") .. ")"
 			.. "\nStage: " .. tostring(stageIdx or "-") .. "/" .. S.stageMax .. "  |  Mob: " .. mobs .. "  |  HP: " .. tostring(S.hp and math.floor(S.hp) or "-") .. " (limit " .. S.returnHP .. ")"
 			.. "\nTrain: " .. trainInfo
+			.. "\nEnhance: " .. enhanceStatus
+			.. "\nForge: " .. forgeStatus
 			.. "\nRarity drops: " .. pend .. " (total read " .. countDrops() .. ")  |  Bag: " .. #bagList .. "/" .. bagSize
 			.. "\nDrops read this stage: " .. (dropSeen and "YES" or "NO")
 			.. string.format("\nIdle TP: %.1f/%.1fs  |  Confirm: %.1f/%.1fs", idleT, S.collectIdle, confT, S.collectConfirm)
@@ -1221,6 +1687,41 @@ task.spawn(function()
 		end
 	end
 end)
+
+Gui:CreateSettingsSection({
+	Name = "Mute Notifications",
+	Description = "Silence notifications per function",
+	Expanded = true,
+})
+
+Gui:CreateSettingsToggle({
+	Name = "Mute All Notifications",
+	Description = "Silence every function notification",
+	Flag = "ac_mute_all",
+	CurrentValue = false,
+	Callback = function(v)
+		muteAll = v
+		logf("UI", "Mute All " .. onOff(v), true)
+		if uiReady then rawNotify("Notifications", v and "All notifications muted" or "Notifications enabled", 2) end
+	end
+})
+
+for _, f in ipairs(notifFuncs) do
+	local key, label = f[1], f[2]
+	Gui:CreateSettingsToggle({
+		Name = "Mute: " .. label,
+		Description = "Silence notifications from " .. label,
+		Flag = "ac_mute_" .. string.lower(key),
+		CurrentValue = false,
+		Callback = function(v)
+			muted[key] = v or nil
+			logf("UI", "Mute " .. label .. " " .. onOff(v), true)
+			if uiReady then
+				rawNotify("Notifications", label .. (v and " muted" or " unmuted"), 2)
+			end
+		end
+	})
+end
 
 Tab:CreateSection({Name = "Auto Farm"})
 
@@ -1235,15 +1736,13 @@ Tab:CreateDropdown({
 		if not m then return end
 		S.mode = m
 		logf("UI", "Farm Mode = " .. m, true)
+		uiNotify("Farm", "Farm Mode", "Mode set to " .. m)
 		applyFarm()
 		if S.farm and S.combat then
 			local hrp = getHRP()
-			if hrp then
-				if not S.base then S.base = hrp.Position end
-				if nearHome(hrp.Position) then
-					resetStage()
-					notify("Stage", "At base, starting from Stage " .. S.stageStart)
-				end
+			if hrp and nearHome(hrp.Position) then
+				resetStage()
+				notify("Stage", "Stage", "At spawn, starting from Stage " .. S.stageStart)
 			end
 		end
 	end
@@ -1257,15 +1756,13 @@ Tab:CreateToggle({
 	Callback = function(v)
 		S.farm = v
 		logf("UI", "Auto Farm " .. (v and "ON" or "OFF"), true)
+		uiNotify("Farm", "Auto Farm", onOff(v) .. " (" .. S.mode .. ")")
 		applyFarm()
 		if v and S.combat then
 			local hrp = getHRP()
-			if hrp then
-				if not S.base then S.base = hrp.Position end
-				if nearHome(hrp.Position) then
-					resetStage()
-					notify("Stage", "At base, starting from Stage " .. S.stageStart)
-				end
+			if hrp and nearHome(hrp.Position) then
+				resetStage()
+				notify("Stage", "Stage", "At spawn, starting from Stage " .. S.stageStart)
 			end
 		end
 	end
@@ -1279,8 +1776,9 @@ Tab:CreateToggle({
 	Callback = function(v)
 		S.autoRebirth = v
 		logf("UI", "Auto Rebirth " .. (v and "ON" or "OFF"), true)
+		uiNotify("Rebirth", "Auto Rebirth", onOff(v))
 		if v and not (StateMod and Economy) then
-			notify("Rebirth", "State/Economy module not found, Auto Rebirth cannot check Level")
+			notify("Rebirth", "Rebirth", "State/Economy module not found, Auto Rebirth cannot check Level")
 		end
 	end
 })
@@ -1291,7 +1789,11 @@ Tab:CreateSlider({
 	Range = {1, 40},
 	Increment = 1,
 	CurrentValue = 5,
-	Callback = function(v) S.distance = v; logf("UI", "Mob Distance = " .. v) end
+	Callback = function(v)
+		S.distance = v
+		logf("UI", "Mob Distance = " .. v)
+		uiNotifyD("distance", "Farm", "Mob Distance", "Set to " .. v)
+	end
 })
 
 Tab:CreateSlider({
@@ -1301,7 +1803,11 @@ Tab:CreateSlider({
 	Range = {0, 20},
 	Increment = 1,
 	CurrentValue = 3,
-	Callback = function(v) S.heightOffset = v; logf("UI", "Stand Height = " .. v) end
+	Callback = function(v)
+		S.heightOffset = v
+		logf("UI", "Stand Height = " .. v)
+		uiNotifyD("height", "Farm", "Stand Height", "Set to " .. v)
+	end
 })
 
 Tab:CreateButton({
@@ -1311,15 +1817,97 @@ Tab:CreateButton({
 	Callback = function()
 		logf("UI", "Reset Stage button", true)
 		resetStage()
-		notify("Stage", "Reset, starting from Stage " .. S.stageStart)
+		notify("Stage", "Stage", "Reset, starting from Stage " .. S.stageStart)
 	end
 })
 
-Tab:CreateSection({Name = "Enhance Info"})
+Tab:CreateSection({Name = "Auto Enhance"})
 
 local _, _, _, EnhPara = Tab:CreateParagraph({
 	Title = "Enhance",
 	Content = "-"
+})
+
+Tab:CreateToggle({
+	Name = "Auto Enhance",
+	Description = "Enhance automatically up to the target level (uses Feather, Coins, Star Dust, Comet Core)",
+	Flag = "ac_enhance",
+	CurrentValue = false,
+	Callback = function(v)
+		S.enhance = v
+		logf("UI", "Auto Enhance " .. (v and "ON" or "OFF"), true)
+		uiNotify("Enhance", "Auto Enhance", onOff(v))
+	end
+})
+
+Tab:CreateSlider({
+	Name = "Enhance Target Level",
+	Description = "Stops at this level (capped by your Rebirth)",
+	Flag = "ac_enhtarget",
+	Range = {1, 20},
+	Increment = 1,
+	CurrentValue = 10,
+	Callback = function(v)
+		S.enhanceTarget = v
+		logf("UI", "Enhance Target = +" .. v)
+		uiNotifyD("enhtarget", "Enhance", "Enhance Target", "Target level +" .. v)
+	end
+})
+
+Tab:CreateToggle({
+	Name = "Enhance Bow",
+	Flag = "ac_enhbow",
+	CurrentValue = true,
+	Callback = function(v)
+		S.enhSlots.bow = v
+		uiNotify("Enhance", "Enhance Bow", onOff(v))
+	end
+})
+
+Tab:CreateToggle({
+	Name = "Enhance Quiver",
+	Flag = "ac_enhquiver",
+	CurrentValue = false,
+	Callback = function(v)
+		S.enhSlots.quiver = v
+		uiNotify("Enhance", "Enhance Quiver", onOff(v))
+	end
+})
+
+Tab:CreateToggle({
+	Name = "Enhance Cloak",
+	Flag = "ac_enhcloak",
+	CurrentValue = false,
+	Callback = function(v)
+		S.enhSlots.cloak = v
+		uiNotify("Enhance", "Enhance Cloak", onOff(v))
+	end
+})
+
+Tab:CreateToggle({
+	Name = "Use Success Scroll",
+	Description = "Use a scroll when the success chance is at or below the slider value",
+	Flag = "ac_enhscroll",
+	CurrentValue = false,
+	Callback = function(v)
+		S.enhanceScroll = v
+		logf("UI", "Use Success Scroll " .. (v and "ON" or "OFF"), true)
+		uiNotify("Enhance", "Success Scroll", onOff(v))
+	end
+})
+
+Tab:CreateSlider({
+	Name = "Scroll if chance <=",
+	Description = "Success chance percent",
+	Flag = "ac_enhscrollbelow",
+	Range = {10, 100},
+	Increment = 5,
+	CurrentValue = 70,
+	Suffix = "%",
+	Callback = function(v)
+		S.scrollBelow = v
+		uiNotifyD("scrollbelow", "Enhance", "Scroll Threshold", "Use scroll if chance <= " .. v .. "%")
+	end
 })
 
 task.spawn(function()
@@ -1334,6 +1922,89 @@ task.spawn(function()
 		end
 	end
 end)
+
+Tab:CreateSection({Name = "Auto Forge"})
+
+Tab:CreateToggle({
+	Name = "Auto Forge",
+	Description = "Forge automatically using your stored Loot",
+	Flag = "ac_forge",
+	CurrentValue = false,
+	Callback = function(v)
+		S.autoForge = v
+		if not v then forging = false end
+		logf("UI", "Auto Forge " .. (v and "ON" or "OFF"), true)
+		uiNotify("Forge", "Auto Forge", onOff(v) .. " (" .. S.forgeType .. ")")
+	end
+})
+
+Tab:CreateDropdown({
+	Name = "Forge Type",
+	Description = "What to forge",
+	Flag = "ac_forgetype",
+	Options = forgeTypes,
+	CurrentOption = S.forgeType,
+	Callback = function(sel)
+		local m = normSingle(sel, forgeTypes)
+		if not m then return end
+		S.forgeType = m
+		logf("UI", "Forge Type = " .. m, true)
+		uiNotifyD("forgetype", "Forge", "Forge Type", "Forging " .. m)
+	end
+})
+
+Tab:CreateSlider({
+	Name = "Loot Per Forge",
+	Description = "How much Loot to put in each forge",
+	Flag = "ac_forgeloot",
+	Range = {forgeMinLoot, forgeMaxLoot},
+	Increment = 1,
+	CurrentValue = S.forgeLoot,
+	Callback = function(v)
+		S.forgeLoot = v
+		logf("UI", "Loot Per Forge = " .. v)
+		uiNotifyD("forgeloot", "Forge", "Loot Per Forge", "Set to " .. v)
+	end
+})
+
+Tab:CreateDropdown({
+	Name = "If Not Better",
+	Description = "What to do with a result that is not better than yours (better ones are equipped)",
+	Flag = "ac_forgeworse",
+	Options = forgeWorseModes,
+	CurrentOption = S.forgeWorse,
+	Callback = function(sel)
+		local m = normSingle(sel, forgeWorseModes)
+		if not m then return end
+		S.forgeWorse = m
+		logf("UI", "Forge If Not Better = " .. m, true)
+		uiNotifyD("forgeworse", "Forge", "If Not Better", m)
+	end
+})
+
+Tab:CreateSlider({
+	Name = "Forge Delay",
+	Description = "Seconds between forges",
+	Flag = "ac_forgedelay",
+	Range = {0, 10},
+	Increment = 1,
+	CurrentValue = 1,
+	Callback = function(v)
+		S.forgeDelay = v
+		uiNotifyD("forgedelay", "Forge", "Forge Delay", "Set to " .. v .. "s")
+	end
+})
+
+Tab:CreateToggle({
+	Name = "Teleport To Bench",
+	Description = "Go to the Crafting Bench while forging, then come back",
+	Flag = "ac_forgetp",
+	CurrentValue = true,
+	Callback = function(v)
+		S.forgeTeleport = v
+		uiNotify("Forge", "Teleport To Bench", onOff(v))
+	end
+})
 
 Tab:CreateSection({Name = "Auto Collect"})
 
@@ -1351,6 +2022,8 @@ local rarityDropdown = {Tab:CreateDropdown({
 		local names = {}
 		for k in pairs(t) do table.insert(names, k) end
 		logf("UI", "Rarity Collect selected: " .. table.concat(names, ","), true)
+		uiNotifyD("rarity", "Collect", "Rarity Collect",
+			#names > 0 and (#names .. " selected: " .. table.concat(names, ", ")) or "None selected")
 	end
 })}
 
@@ -1380,10 +2053,7 @@ Tab:CreateToggle({
 		lastCollectTP = os.clock()
 		clearSince = nil
 		logf("UI", "Auto Collect " .. (v and "ON" or "OFF"), true)
-		if v and not S.base then
-			local hrp = getHRP()
-			if hrp then S.base = hrp.Position end
-		end
+		uiNotify("Collect", "Auto Collect", onOff(v))
 	end
 })
 
@@ -1395,17 +2065,19 @@ Tab:CreateToggle({
 	Callback = function(v)
 		S.collectMaterials = v
 		logf("UI", "Take Enchant Material " .. (v and "ON" or "OFF"), true)
+		uiNotify("Collect", "Enchant Material", onOff(v))
 	end
 })
 
 Tab:CreateToggle({
 	Name = "Return (Bag Full / Low HP)",
-	Description = "Go to base on full bag or low HP",
+	Description = "Warp back on full bag or low HP",
 	Flag = "ac_returnfull",
 	CurrentValue = true,
 	Callback = function(v)
 		S.returnOnFull = v
 		logf("UI", "Return (Bag Full / Low HP) " .. (v and "ON" or "OFF"), true)
+		uiNotify("Return", "Return", onOff(v))
 		if not v then S.bagFull = false end
 	end
 })
@@ -1421,37 +2093,14 @@ Tab:CreateSlider({
 		S.returnHP = v
 		if S.hp and S.hp >= v then S.hpArmed = true end
 		logf("UI", "Return if HP < " .. v, true)
-	end
-})
-
-Tab:CreateSection({Name = "Base"})
-
-Tab:CreateButton({
-	Name = "Set Base",
-	Description = "Save current position as base",
-	Interact = "Set",
-	Callback = function()
-		local hrp = getHRP()
-		if hrp then
-			S.base = hrp.Position
-			notify("Base", "Base position saved")
-		end
-	end
-})
-
-Tab:CreateButton({
-	Name = "Return to Base",
-	Description = "Teleport to base",
-	Interact = "Go",
-	Callback = function()
-		logf("UI", "Return to Base button", true)
-		task.spawn(function()
-			S.bagFull = true
-			returnToBase()
-		end)
+		uiNotifyD("returnhp", "Return", "Return HP", "Return if HP below " .. v)
 	end
 })
 
 if not MobsMod then
-	notify("Mobs", "Client.Mobs module cannot be required, using FxLocal.Mobs folder scan")
+	notify("Farm", "Mobs", "Client.Mobs module cannot be required, using FxLocal.Mobs folder scan")
 end
+
+task.delay(1.5, function()
+	uiReady = true
+end)
