@@ -37,8 +37,8 @@ end
 
 local BulbGui = loadstring(game:HttpGet('https://pastebin.com/raw/2BGUWvbd'))()
 local Gui = BulbGui:Init({
-	Name = "Auto Combat",
-	Subtitle = "Archer Farm",
+	Name = "+1 Bow Forge",
+	Subtitle = "Pala Bapak Kau",
 	FolderName = "TumblrConfigs",
 	FileName = "autocombat.json"
 })
