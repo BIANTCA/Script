@@ -1,19 +1,23 @@
 local RobloxGui = loadstring(game:HttpGet("https://pastebin.com/raw/2BGUWvbd"))()
 
 local GUI = RobloxGui:Init({
-    Name = "Paper Plane Auto",
-    Subtitle = "Automation & Shop",
-    FolderName = "PPS_Configs",
-    FileName = "settings_v12.json"
+    Name       = "+1 Baseball Hit",
+    Subtitle   = "Best Auto Farm",
+    FolderName = "PPT_Configs",
+    FileName   = "settings.json"
 })
 
-local RS = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
-local VirtualUser = game:GetService("VirtualUser")
+local RS           = game:GetService("ReplicatedStorage")
+local Players      = game:GetService("Players")
+local VirtualUser  = game:GetService("VirtualUser")
 
-local Player = Players.LocalPlayer
+local Player  = Players.LocalPlayer
 local Remotes = RS:WaitForChild("Remotes", 10) or RS
-local Shared = RS:FindFirstChild("Shared")
+local Shared  = RS:FindFirstChild("Shared")
+
+-- ============================================================
+-- Remote call helper
+-- ============================================================
 
 local function Call(name, ...)
     if not name or name == "" then return nil end
@@ -44,7 +48,12 @@ local function SafeRequire(path)
     return ok and mod or nil
 end
 
+-- ============================================================
+-- Loop helpers
+-- ============================================================
+
 local loopTokens = {}
+
 local function AutoLoop(id, delay, fn, burst)
     return function(state)
         loopTokens[id] = (loopTokens[id] or 0) + 1
@@ -72,7 +81,7 @@ local function SeqLoop(id, fn)
             while loopTokens[id] == token do
                 local ok, err = pcall(fn, function() return loopTokens[id] == token end)
                 if not ok then
-                    warn("[PPA] " .. id .. " error:", err)
+                    warn("[PPT] " .. id .. " error:", err)
                     task.wait(1)
                 end
                 task.wait()
@@ -81,20 +90,48 @@ local function SeqLoop(id, fn)
     end
 end
 
+-- ============================================================
+-- Notify & UI helpers
+-- ============================================================
+
 local function Notify(title, content, dur)
     GUI:Notify({Title = title, Content = content, Duration = dur or 2})
 end
 
-local playerData = nil
+local function NewParagraph(tab, title, content)
+    local packed = table.pack(tab:CreateParagraph({Title = title, Content = content}))
+    local obj
+    for i = packed.n, 1, -1 do
+        local v = packed[i]
+        if type(v) == "table" and (type(v.SetContent) == "function" or type(v.Set) == "function") then
+            obj = v
+            break
+        end
+    end
+    return {
+        Set = function(_, text)
+            if not obj then return end
+            if type(obj.SetContent) == "function" then
+                if pcall(obj.SetContent, obj, text) then return end
+            end
+            if type(obj.Set) == "function" then
+                if pcall(obj.Set, obj, text) then return end
+                pcall(obj.Set, obj, {Content = text})
+            end
+        end
+    }
+end
 
--- State toggle (diisi lewat SetTrain / SetRebirth)
-local trainOn, rebirthOn = false, false
--- true = paksa teleport ke pad terbaik pada siklus Train berikutnya
+-- ============================================================
+-- Player data
+-- ============================================================
+
+local playerData    = nil
+local trainOn       = false
+local rebirthOn     = false
 local forceTeleportPad = false
-local lastRebirths = nil
+local lastRebirths  = nil
 
--- Rebirth dianggap sukses jika jumlah Rebirths di data bertambah.
--- Jika Auto Train DAN Auto Rebirth ON, paksa teleport ke pad terbaik.
 local function CheckRebirthChange()
     local r = playerData and tonumber(playerData.Rebirths)
     if not r then return end
@@ -134,6 +171,10 @@ local function Short(n)
     return string.format(i == 1 and "%d" or "%.2f%s", n, units[i])
 end
 
+-- ============================================================
+-- World / config data
+-- ============================================================
+
 local worlds = {"World 1", "World 2", "World 3", "World 4", "World 5", "World 6", "World 7"}
 do
     local c = SafeRequire({"Config", "WorldsConfig"})
@@ -152,70 +193,47 @@ do
     end
 end
 
-local planeList = {}
+local BatList = {}
 do
     local c = SafeRequire({"Config", "BatConfig"})
     if c and c.Bats then
         for _, b in ipairs(c.Bats) do
             if not b.RobuxPass and not b.Exclusive and (b.TrophyPrice or b.ExpPrice) then
-                table.insert(planeList, {
-                    Id = b.Id,
-                    World = b.World or 1,
-                    Level = b.Level or 0,
+                table.insert(BatList, {
+                    Id          = b.Id,
+                    World       = b.World or 1,
+                    Level       = b.Level or 0,
                     TrophyPrice = b.TrophyPrice or 0,
-                    ExpPrice = b.ExpPrice or 0,
+                    ExpPrice    = b.ExpPrice or 0,
                 })
             end
         end
     end
-    if #planeList == 0 then
+    if #BatList == 0 then
         local fallback = {
             {"WoodBat", 0}, {"MapleBat", 50}, {"AluminumBat", 75}, {"BlackInkBat", 150},
             {"CandyCaneBat", 300}, {"GoldenBat", 600}, {"IceBat", 1500}, {"LavaBat", 4500},
             {"GalaxyBat", 14000}, {"RainbowLegendBat", 40000},
         }
         for i, f in ipairs(fallback) do
-            table.insert(planeList, {Id = f[1], World = 1, Level = i, TrophyPrice = f[2], ExpPrice = 0})
+            table.insert(BatList, {Id = f[1], World = 1, Level = i, TrophyPrice = f[2], ExpPrice = 0})
         end
     end
-    table.sort(planeList, function(a, b)
+    table.sort(BatList, function(a, b)
         if a.TrophyPrice ~= b.TrophyPrice then return a.TrophyPrice < b.TrophyPrice end
         return a.Level < b.Level
     end)
 end
 
-local trailIds = {"Cloud", "Bubblegum", "Ocean", "Golden", "Toxic", "Candy", "Frost",
-    "Inferno", "Shadow", "Aurora", "Galaxy", "Solar", "Rainbow"}
+local trailIds = {
+    "Cloud", "Bubblegum", "Ocean", "Golden", "Toxic", "Candy", "Frost",
+    "Inferno", "Shadow", "Aurora", "Galaxy", "Solar", "Rainbow"
+}
 
-local eggIds = {"EggStone", "EggToxicScale", "EggFrostShard", "EggVoidCrystal"}
-do
-    local c = SafeRequire({"Config", "PetConfig"})
-    if c and c.Eggs then
-        local list = {}
-        for id, egg in pairs(c.Eggs) do
-            if not egg.Hidden and not egg.RunwayEgg then
-                table.insert(list, {Id = id, World = egg.World or 1, Price = egg.Price or 0})
-            end
-        end
-        table.sort(list, function(a, b)
-            if a.World ~= b.World then return a.World < b.World end
-            return a.Price < b.Price
-        end)
-        if #list > 0 then
-            eggIds = {}
-            for _, e in ipairs(list) do table.insert(eggIds, e.Id) end
-        end
-    end
-end
-
--- ============================================================
--- WorldMap: hanya path ke lobby per world.
--- Req dibaca LANGSUNG dari TextLabel "Rebirths" di dalam setiap TrainingPlatform.
--- ============================================================
 local WorldOrder = {"World1", "World2", "World3", "World4", "World5", "World6", "World7"}
 
 local WorldMap = {
-    World1 = {LobbyPath = {"Lobby"},          MinRebirth = 0},
+    World1 = {LobbyPath = {"Lobby"},           MinRebirth = 0},
     World2 = {LobbyPath = {"World2", "Lobby"}, MinRebirth = 12},
     World3 = {LobbyPath = {"World3", "Lobby"}, MinRebirth = 40},
     World4 = {LobbyPath = {"World4", "Lobby"}, MinRebirth = 88},
@@ -224,34 +242,51 @@ local WorldMap = {
     World7 = {LobbyPath = {"World7", "Lobby"}, MinRebirth = 265},
 }
 
--- Semua nilai tetap (tidak ada slider / input)
 local cfg = {
-    TrainDelay       = 0.15,   -- jeda antar spam Train (server minimum 0.15s)
-    TrainBurst       = 5,      -- spam remote Train 5x per siklus
+    ToggleDelay      = 1,
+    TrainDelay       = 0.15,
+    TrainBurst       = 5,
     TrainUseTeleport = true,
     TrainArriveDelay = 1,
-    LaunchArg        = 0.3,    -- argumen remote Launch (tetap)
+    LaunchArg        = 0.3,
     ArriveDelay      = 0.2,
     ThrowWait        = 2,
     MaxWait          = 9.25,
     RebirthDelay     = 2,
     TapDelay         = 0.2,
-    UpgradeDelay     = 1,
-    PlaneCheckDelay  = 1,
-    AutoEquipPlane   = true,
+    UpgradeDelay     = 30,
+    BatCheckDelay  = 1,
+    AutoEquipBat   = true,
     TrailCheckDelay  = 1,
     AutoEquipTrail   = true,
-    EggId            = eggIds[1],
-    HatchRemote      = "BuyEgg",
-    HatchDelay       = 0.5,
+    EggId            = "",
+    BuyEggDelay      = 0.5,
     RunwayDelay      = 3,
-    ClaimDelay       = 30,     -- interval auto claim (detik)
-    PlaytimeSlots    = 12,     -- ClaimPlaytime argumen 1..12 (fallback)
+    ClaimDelay       = 30,
+    PlaytimeSlots    = 12,
     World            = worlds[1],
 }
 
 -- ============================================================
--- Helpers shared
+-- DelayedToggle — FIXED: captures state correctly
+-- ============================================================
+
+local function DelayedToggle(fn)
+    local token = 0
+    return function(state)
+        token = token + 1
+        local mine     = token
+        local captured = state  -- capture state at time of call
+        task.delay(cfg.ToggleDelay, function()
+            if token == mine then
+                fn(captured)
+            end
+        end)
+    end
+end
+
+-- ============================================================
+-- Movement helpers
 -- ============================================================
 
 local function GetRoot()
@@ -275,13 +310,14 @@ local function WaitAlive(seconds, alive)
 end
 
 -- ============================================================
--- World & training pad helpers
+-- Lobby & world helpers
 -- ============================================================
 
 local function GetLobbyForWorld(worldKey)
-    local path = WorldMap[worldKey].LobbyPath
+    local map = WorldMap[worldKey]
+    if not map then return nil end
     local inst = workspace
-    for _, part in ipairs(path) do
+    for _, part in ipairs(map.LobbyPath) do
         inst = inst and inst:FindFirstChild(part)
     end
     return inst
@@ -312,16 +348,172 @@ local function GetActiveWorldKey()
 end
 
 -- ============================================================
--- Platform helpers — baca Req dari TextLabel "Rebirths" di workspace
---
--- Struktur per TrainingPlatform:
---   TrainingPlatformN
---     Pad          (BasePart / Model)
---     PlatformTitle
---       Title
---         Rebirths (TextLabel) <- LocalizedText = angka minimal rebirth
---
--- Pad Robux tidak punya Rebirths label (atau nilainya bukan angka) -> dilewati.
+-- World center cache (for proximity detection)
+-- ============================================================
+
+local worldCenterCache = {}
+
+local function GetWorldCenter(worldKey)
+    local lobby = GetLobbyForWorld(worldKey)
+    if not lobby then return nil end
+    local cached = worldCenterCache[worldKey]
+    if cached and cached.Lobby == lobby then return cached.Pos end
+    local sum, n = Vector3.zero, 0
+    for _, child in ipairs(lobby:GetChildren()) do
+        local taken = 0
+        if child:IsA("BasePart") then
+            sum = sum + child.Position
+            n   = n + 1
+            taken = 1
+        end
+        for _, d in ipairs(child:GetDescendants()) do
+            if d:IsA("BasePart") then
+                sum   = sum + d.Position
+                n     = n + 1
+                taken = taken + 1
+                if taken >= 10 then break end
+            end
+        end
+    end
+    if n == 0 then return nil end
+    local pos = sum / n
+    worldCenterCache[worldKey] = {Lobby = lobby, Pos = pos}
+    return pos
+end
+
+local lastKnownWorld = nil
+
+local function GetCurrentWorldKey()
+    local root = GetRoot()
+    if root then
+        local bestKey, bestDist = nil, math.huge
+        for _, key in ipairs(WorldOrder) do
+            local pos = GetWorldCenter(key)
+            if pos then
+                local dist = (root.Position - pos).Magnitude
+                if dist < bestDist then
+                    bestDist, bestKey = dist, key
+                end
+            end
+        end
+        if bestKey then
+            lastKnownWorld = bestKey
+            return bestKey
+        end
+    end
+    if lastKnownWorld and GetLobbyForWorld(lastKnownWorld) then
+        return lastKnownWorld
+    end
+    local d = GetData()
+    local w = d and (d.World or d.CurrentWorld or d.WorldId)
+    if type(w) == "number" then
+        local key = "World" .. tostring(w)
+        if WorldMap[key] then
+            lastKnownWorld = key; return key
+        end
+    elseif type(w) == "string" then
+        local key = w:gsub("%s+", "")
+        if WorldMap[key] then
+            lastKnownWorld = key; return key
+        end
+    end
+    local rebirths = d and tonumber(d.Rebirths) or 0
+    local best = "World1"
+    for _, key in ipairs(WorldOrder) do
+        if rebirths >= WorldMap[key].MinRebirth and GetLobbyForWorld(key) then
+            best = key
+        end
+    end
+    lastKnownWorld = best
+    return best
+end
+
+-- ============================================================
+-- Egg helpers (kept for later use, no UI)
+-- ============================================================
+
+local function LabelText(lbl)
+    if not lbl then return "" end
+    local ok, t = pcall(function()
+        if lbl.Text and lbl.Text ~= "" then return lbl.Text end
+        return lbl.LocalizedText or ""
+    end)
+    return ok and t or ""
+end
+
+local function ResolveEggId(ep, tag, displayName)
+    local id
+    pcall(function()
+        id = ep:GetAttribute("EggId") or ep:GetAttribute("Egg")
+        if not id and tag then
+            id = tag:GetAttribute("EggId") or tag:GetAttribute("Egg")
+        end
+    end)
+    if not id then
+        local v = ep:FindFirstChild("EggId", true) or ep:FindFirstChild("Egg", true)
+        if v and v:IsA("StringValue") and v.Value ~= "" then id = v.Value end
+    end
+    if id and id ~= "" then return tostring(id) end
+    local cleaned = displayName:gsub("[Ee][Gg][Gg]", ""):gsub("[^%w]", "")
+    if cleaned == "" then return displayName end
+    return "Egg" .. cleaned
+end
+
+local function ReadEggPlatform(ep)
+    local nameLbl, amountLbl, priceLbl, tag
+    for _, d in ipairs(ep:GetDescendants()) do
+        if d.Name == "Robux" and d:IsA("GuiObject") then
+            return nil
+        elseif d.Name == "EggName"  and (d:IsA("TextLabel") or d:IsA("TextButton")) then nameLbl   = d
+        elseif d.Name == "Amount"   and (d:IsA("TextLabel") or d:IsA("TextButton")) then amountLbl = d
+        elseif d.Name == "Price"    and (d:IsA("TextLabel") or d:IsA("TextButton")) then priceLbl  = d
+        elseif d.Name == "EggTag"   then tag = d
+        end
+    end
+    local displayName = LabelText(nameLbl)
+    if displayName == "" then displayName = ep.Name end
+    displayName = displayName:gsub("^%s+", ""):gsub("%s+$", "")
+    local priceText = LabelText(amountLbl)
+    if priceText == "" then priceText = LabelText(priceLbl) end
+    if priceText == "" then priceText = "?" end
+    return {Id = ResolveEggId(ep, tag, displayName), Name = displayName, Price = priceText, PlatformInst = ep}
+end
+
+local function GetEggList(worldKey)
+    local lobby = GetLobbyForWorld(worldKey)
+    if not lobby then return {} end
+    local platforms = lobby:FindFirstChild("EggPlatforms")
+    if not platforms then return {} end
+    local list = {}
+    for _, ep in ipairs(platforms:GetChildren()) do
+        if ep.Name:match("^EggPlatform%d+$") then
+            local info = ReadEggPlatform(ep)
+            if info then list[#list + 1] = info end
+        end
+    end
+    table.sort(list, function(a, b)
+        local na = tonumber(a.PlatformInst.Name:match("%d+")) or 0
+        local nb = tonumber(b.PlatformInst.Name:match("%d+")) or 0
+        return na < nb
+    end)
+    local used = {}
+    for _, info in ipairs(list) do
+        local display = info.Name .. " (" .. info.Price .. ")"
+        if used[display] then display = display .. " [" .. info.PlatformInst.Name .. "]" end
+        used[display] = true
+        info.DisplayName = display
+    end
+    return list
+end
+
+local function BuyEggOnce()
+    local id = cfg.EggId
+    if not id or id == "" then return end
+    Call("BuyEgg", id, 1)
+end
+
+-- ============================================================
+-- Training pad helpers
 -- ============================================================
 
 local function ReadPlatformReq(tp)
@@ -343,7 +535,6 @@ local function GetTPCFrame(tp)
     return nil
 end
 
--- Return: list {Inst, Req, CF} diurutkan Req naik
 local function CollectFreePlatforms(lobby)
     local list = {}
     for _, c in ipairs(lobby:GetChildren()) do
@@ -365,9 +556,7 @@ local function GetFreePlatforms(worldKey)
     local lobby = GetLobbyForWorld(worldKey)
     if not lobby then return {} end
     local cached = platformCache[worldKey]
-    if cached and #cached > 0 and cached[1].Inst.Parent == lobby then
-        return cached
-    end
+    if cached and #cached > 0 and cached[1].Inst.Parent == lobby then return cached end
     local list = CollectFreePlatforms(lobby)
     if #list > 0 then platformCache[worldKey] = list end
     return list
@@ -386,7 +575,6 @@ local function GetBestPadCFrame(worldKey, rebirths)
     return bestCF, bestReq, bestName
 end
 
--- Kembalikan worldKey, CF, Req, Name untuk pad terbaik saat ini
 local function GetBestPad()
     local d        = GetData()
     local rebirths = d and (d.Rebirths or 0) or 0
@@ -409,12 +597,12 @@ local function GetNextPad(worldKey, rebirths)
 end
 
 -- ============================================================
--- Auto Train / Auto Throw / Auto Rebirth (logic)
+-- Auto Train / Throw / Rebirth
 -- ============================================================
 
-local trainActivePad = nil   -- "worldKey:req", untuk deteksi perubahan pad
+local trainActivePad = nil
 local throwingActive = false
-local TrainPadProx   = 5     -- studs
+local TrainPadProx   = 5
 
 local function IsUserNearCF(cf)
     local root = GetRoot()
@@ -426,7 +614,7 @@ local function TeleportToBestPad(alive)
     local worldKey, cf, req, name = GetBestPad()
     if not worldKey then return false end
     if not cf then
-        Notify("Auto Train", "Pad tidak ditemukan di " .. worldKey .. " (belum ter-load?)", 3)
+        Notify("Auto Train", "No pad found in " .. worldKey, 3)
         return false
     end
     MoveTo(cf)
@@ -449,7 +637,6 @@ local function TrainCycle(alive)
 
     if cfg.TrainUseTeleport then
         if not cf then task.wait(1) return end
-        -- Teleport jika rebirth baru sukses (Auto Train + Auto Rebirth ON) atau jauh dari pad
         if forceTeleportPad or not IsUserNearCF(cf) then
             if not TeleportToBestPad(alive) then task.wait(1) return end
             forceTeleportPad = false
@@ -457,7 +644,6 @@ local function TrainCycle(alive)
         end
     end
 
-    -- Spam remote Train sebanyak TrainBurst (5x) per siklus
     for _ = 1, cfg.TrainBurst do
         if not alive() or throwingActive then return end
         task.spawn(pcall, function() Call("Train") end)
@@ -478,18 +664,17 @@ end
 
 local warnedLabel = false
 
--- Selalu teleport ke ThrowZone.Label, throw, lalu kembali ke posisi awal
 local function ThrowCycle(alive)
     if not GetRoot() then task.wait(1) return end
     throwingActive = true
     local ok, err = pcall(function()
-        local root = GetRoot()
+        local root   = GetRoot()
         if not root then return end
         local origin = root.CFrame
         local target = GetLabelCFrame()
         if not target and not warnedLabel then
             warnedLabel = true
-            Notify("Throw", "ThrowZone.Label not found, throwing from current position", 4)
+            Notify("Throw", "ThrowZone.Label not found, throwing in place", 4)
         end
         if target then
             MoveTo(target)
@@ -501,7 +686,7 @@ local function ThrowCycle(alive)
         if target then MoveTo(origin) end
     end)
     throwingActive = false
-    if not ok then warn("[PPA] ThrowCycle error:", err) end
+    if not ok then warn("[PPT] ThrowCycle error:", err) end
     WaitAlive(cfg.MaxWait, alive)
 end
 
@@ -534,10 +719,7 @@ local tabFarm = GUI:CreateTab({Name = "Auto Farm", Icon = 4483362458})
 
 tabFarm:CreateSection({Name = "Auto Farm"})
 
-local _, _, _, trainStatusObj = tabFarm:CreateParagraph({
-    Title   = "Train Status",
-    Content = "Idle"
-})
+local trainStatus = NewParagraph(tabFarm, "Train Status", "Idle")
 
 task.spawn(function()
     while true do
@@ -547,104 +729,48 @@ task.spawn(function()
         local worldKey, _, req, name = GetBestPad()
         local activeWorld = worldKey or "World1"
         local nextName, nextReq = GetNextPad(activeWorld, rebirths)
-        local text = "Rebirths: " .. rebirths
-        text = text .. "\nWorld: " .. activeWorld
-        if name then text = text .. "\nPad aktif: " .. name .. " (min " .. req .. ")" end
-        if nextName then
-            text = text .. "\nBerikutnya: " .. nextName .. " (butuh " .. nextReq .. ")"
-        else
-            text = text .. "\nPad: sudah tertinggi di world ini"
-        end
-        if throwingActive then text = text .. "\nStatus: Throwing (train ditahan)" end
-        if trainStatusObj then pcall(function() trainStatusObj:SetContent(text) end) end
+        local text = "Rebirths: " .. rebirths .. "\nWorld: " .. activeWorld
+        if name then text = text .. "\nActive pad: " .. name .. " (min " .. req .. ")" end
+        if nextName then text = text .. "\nNext: " .. nextName .. " (needs " .. nextReq .. ")"
+        else             text = text .. "\nHighest pad reached" end
+        if throwingActive then text = text .. "\nThrowing (train paused)" end
+        trainStatus:Set(text)
     end
 end)
 
 tabFarm:CreateToggle({
     Name         = "Auto Train",
-    Description  = "Train di pad terbaik (spam 5x). Teleport jika jarak > 5 studs / setelah rebirth sukses",
+    Description  = "Train on the best pad",
     CurrentValue = true,
     Flag         = "AutoTrain",
-    Callback     = SetTrain
+    Callback     = DelayedToggle(SetTrain)
 })
 
 tabFarm:CreateToggle({
     Name         = "Auto Throw",
-    Description  = "Label > Throw > wait > back > wait max > repeat",
+    Description  = "Throw the Bat on loop",
     CurrentValue = true,
     Flag         = "AutoThrow",
-    Callback     = SetThrow
+    Callback     = DelayedToggle(SetThrow)
 })
 
 tabFarm:CreateToggle({
     Name         = "Auto Rebirth",
+    Description  = "Rebirth when ready",
     CurrentValue = true,
     Flag         = "AutoRebirth",
-    Callback     = SetRebirth
+    Callback     = DelayedToggle(SetRebirth)
 })
 
 tabFarm:CreateToggle({
-    Name         = "Teleport ke Pad Training",
-    Description  = "Off = train dari posisi berdiri saja",
+    Name         = "Teleport to Training Pad",
+    Description  = "Off = train from where you stand",
     CurrentValue = true,
     Flag         = "TrainUseTeleport",
-    Callback     = function(v) cfg.TrainUseTeleport = v end
-})
-
--- ============================================================
--- Tab: Eggs & Pets
--- ============================================================
-
-local tabEggs = GUI:CreateTab({Name = "Eggs & Pets", Icon = 4483362458})
-
-tabEggs:CreateSection({Name = "Auto Hatching"})
-tabEggs:CreateDropdown({
-    Name          = "Egg",
-    Options       = eggIds,
-    CurrentOption = eggIds[1],
-    Flag          = "EggId",
-    Callback      = function(opt) cfg.EggId = opt end
-})
-tabEggs:CreateDropdown({
-    Name          = "Hatch Remote",
-    Options       = {"BuyEgg", "OpenEgg"},
-    CurrentOption = "BuyEgg",
-    Flag          = "HatchRemote",
-    Callback      = function(opt) cfg.HatchRemote = opt end
-})
-
-local function HatchOnce()
-    if cfg.HatchRemote == "BuyEgg" then
-        Call("BuyEgg", cfg.EggId, 1)
-    else
-        Call(cfg.HatchRemote, cfg.EggId)
+    -- Direct apply, no delay needed for a config flag
+    Callback     = function(v)
+        cfg.TrainUseTeleport = v
     end
-end
-
-tabEggs:CreateToggle({
-    Name     = "Auto Hatch",
-    Flag     = "AutoHatch",
-    Callback = AutoLoop("Hatch",
-        function() return cfg.HatchDelay end,
-        HatchOnce)
-})
-tabEggs:CreateButton({
-    Name     = "Hatch Once",
-    Interact = "Hatch",
-    Flag     = "HatchOnce",
-    Callback = function()
-        HatchOnce()
-        Notify("Egg", cfg.HatchRemote .. ": " .. tostring(cfg.EggId))
-    end
-})
-
-tabEggs:CreateSection({Name = "Runway Eggs"})
-tabEggs:CreateToggle({
-    Name     = "Auto Open Runway Egg",
-    Flag     = "AutoRunway",
-    Callback = AutoLoop("Runway",
-        function() return cfg.RunwayDelay end,
-        function() Call("OpenRunwayEgg") end)
 })
 
 -- ============================================================
@@ -655,24 +781,20 @@ local tabShop = GUI:CreateTab({Name = "Shop & Upgrades", Icon = 4483362458})
 
 tabShop:CreateSection({Name = "Upgrades"})
 
--- Satu paragraf untuk status Plane dan Trail
-local _, _, _, shopStatus = tabShop:CreateParagraph({
-    Title   = "Upgrade Status",
-    Content = "Plane: Idle\nTrail: Idle"
-})
+local shopStatus = NewParagraph(tabShop, "Upgrade Status", "Bat: Idle\nTrail: Idle")
 
-local planeText, trailText, lastShopText = "Idle", "Idle", ""
+local BatText, trailText, lastShopText = "Idle", "Idle", ""
 
 local function RefreshShopStatus()
-    local text = "Plane: " .. planeText .. "\nTrail: " .. trailText
+    local text = "Bat: " .. BatText .. "\nTrail: " .. trailText
     if text ~= lastShopText then
         lastShopText = text
-        if shopStatus then pcall(function() shopStatus:SetContent(text) end) end
+        shopStatus:Set(text)
     end
 end
 
-local function SetPlaneStatus(text)
-    planeText = (text:gsub("\n", " | "))
+local function SetBatStatus(text)
+    BatText = (text:gsub("\n", " | "))
     RefreshShopStatus()
 end
 
@@ -681,10 +803,10 @@ local function SetTrailStatus(text)
     RefreshShopStatus()
 end
 
-local function NextPlane(d)
+local function NextBat(d)
     local unlocked = d.UnlockedWorld or 1
-    local owned    = d.OwnedPlanes   or {}
-    for _, p in ipairs(planeList) do
+    local owned    = d.OwnedBats   or {}
+    for _, p in ipairs(BatList) do
         if not owned[p.Id] and p.World <= unlocked then return p end
     end
     return nil
@@ -692,24 +814,24 @@ end
 
 local lastBuyId, lastBuyTime = nil, 0
 
-local function PlaneUpgradeStep()
+local function BatUpgradeStep()
     local d = GetData()
-    if not d then SetPlaneStatus("Waiting for player data...") return end
-    local p = NextPlane(d)
-    if not p then SetPlaneStatus("All available planes are owned") return end
+    if not d then SetBatStatus("Waiting for player data...") return end
+    local p = NextBat(d)
+    if not p then SetBatStatus("All Bats owned") return end
     local trophies  = d.Trophies or 0
     local exp       = d.Exp      or 0
     local canAfford = trophies >= p.TrophyPrice and exp >= p.ExpPrice
     if canAfford then
         if lastBuyId == p.Id and os.clock() - lastBuyTime < 3 then return end
         lastBuyId, lastBuyTime = p.Id, os.clock()
-        SetPlaneStatus("Buying " .. p.Id .. "...")
-        Call("BuyPlane", p.Id)
+        SetBatStatus("Buying " .. p.Id .. "...")
+        Call("BuyBat", p.Id)
         task.wait(0.5)
-        if cfg.AutoEquipPlane then Call("EquipPlane", p.Id) end
-        Notify("Plane", "Bought " .. p.Id .. " (" .. Short(p.TrophyPrice) .. ")")
+        if cfg.AutoEquipBat then Call("EquipBat", p.Id) end
+        Notify("Bat", "Bought " .. p.Id .. " (" .. Short(p.TrophyPrice) .. ")")
     else
-        SetPlaneStatus("Next: " .. p.Id .. "\nPrice: " .. Short(p.TrophyPrice) .. " | Have: " .. Short(trophies))
+        SetBatStatus("Next: " .. p.Id .. "\nPrice: " .. Short(p.TrophyPrice) .. " | Have: " .. Short(trophies))
     end
 end
 
@@ -723,7 +845,7 @@ local function TrailUpgradeStep()
     for _, id in ipairs(trailIds) do
         if not owned[id] then nextTrail = id break end
     end
-    if not nextTrail then SetTrailStatus("All trails are owned") return end
+    if not nextTrail then SetTrailStatus("All trails owned") return end
     if lastBuyTrailId == nextTrail and os.clock() - lastBuyTrailTime < 5 then return end
     lastBuyTrailId, lastBuyTrailTime = nextTrail, os.clock()
     SetTrailStatus("Buying " .. nextTrail .. "...")
@@ -736,31 +858,31 @@ local function TrailUpgradeStep()
         Notify("Trail", "Bought " .. nextTrail)
         lastBuyTrailId = nil
     else
-        SetTrailStatus("Belum mampu beli: " .. nextTrail)
+        SetTrailStatus("Cannot afford: " .. nextTrail)
     end
 end
 
-local startPlane = AutoLoop("PlaneUpgrade",
-    function() return cfg.PlaneCheckDelay end,
-    PlaneUpgradeStep)
+local startBat = AutoLoop("BatUpgrade",
+    function() return cfg.BatCheckDelay end,
+    BatUpgradeStep)
 local startTrail = AutoLoop("TrailUpgrade",
     function() return cfg.TrailCheckDelay end,
     TrailUpgradeStep)
 
 tabShop:CreateToggle({
-    Name         = "Auto Upgrade Plane",
-    Description  = "Beli plane termurah yang belum dimiliki",
+    Name         = "Auto Upgrade Bat",
+    Description  = "Buy the cheapest new Bat",
     CurrentValue = true,
-    Flag         = "AutoUpgradePlane",
-    Callback     = startPlane
+    Flag         = "AutoUpgradeBat",
+    Callback     = DelayedToggle(startBat)
 })
 
 tabShop:CreateToggle({
     Name         = "Auto Upgrade Trail",
-    Description  = "Beli trail dari urutan pertama, equip otomatis",
+    Description  = "Buy and equip trails in order",
     CurrentValue = true,
     Flag         = "AutoUpgradeTrail",
-    Callback     = startTrail
+    Callback     = DelayedToggle(startTrail)
 })
 
 -- ============================================================
@@ -775,7 +897,10 @@ tabWorld:CreateDropdown({
     Options       = worlds,
     CurrentOption = worlds[1],
     Flag          = "SelectedWorld",
-    Callback      = function(opt) cfg.World = opt end
+    Callback      = function(opt)
+        if type(opt) == "table" then opt = opt[1] end
+        if opt then cfg.World = opt end
+    end
 })
 tabWorld:CreateButton({
     Name     = "Teleport to Selected World",
@@ -789,21 +914,18 @@ tabWorld:CreateButton({
 })
 
 -- ============================================================
--- Selalu aktif tanpa toggle (tidak ada di UI)
+-- Background tasks (always on)
 -- ============================================================
 
--- Anti-AFK
 Player.Idled:Connect(function()
     VirtualUser:CaptureController()
     VirtualUser:ClickButton2(Vector2.new())
 end)
 
--- Auto Tap Boost
 AutoLoop("TapBoost",
     function() return cfg.TapDelay end,
     function() Call("TapBoost") end)(true)
 
--- Auto Buy All Upgrades
 AutoLoop("UpgradeAll",
     function() return cfg.UpgradeDelay end,
     function()
@@ -813,30 +935,22 @@ AutoLoop("UpgradeAll",
         end
     end)(true)
 
--- Auto Claim Rewards
--- ClaimPlaytime(index) dipanggil untuk index 1..N (N = jumlah slot Playtime,
--- fallback PlaytimeSlots). Slot yang sudah ada di Playtime.Claimed dilewati.
 local function ClaimAll()
-    local d = GetData()
+    local d  = GetData()
     local pt = d and d.Playtime
     local claimed = pt and pt.Claimed or {}
-    local slots = (pt and type(pt.Amounts) == "table" and #pt.Amounts > 0) and #pt.Amounts
-        or cfg.PlaytimeSlots
-
+    local slots   = (pt and type(pt.Amounts) == "table" and #pt.Amounts > 0)
+        and #pt.Amounts or cfg.PlaytimeSlots
     for i = 1, slots do
         if not (claimed[i] or claimed[tostring(i)]) then
             Call("ClaimPlaytime", i)
             task.wait(0.3)
         end
     end
-
-    Call("ClaimDaily")
-    task.wait(0.3)
-    Call("ClaimOffline")
-    task.wait(0.3)
+    Call("ClaimDaily")  task.wait(0.3)
+    Call("ClaimOffline") task.wait(0.3)
     if not (d and d.GroupChestClaimed) then
-        Call("ClaimGroupChest")
-        task.wait(0.3)
+        Call("ClaimGroupChest") task.wait(0.3)
     end
     Call("IndexClaim")
 end
@@ -846,14 +960,34 @@ AutoLoop("Claims",
     ClaimAll)(true)
 
 -- ============================================================
--- Default ON: jalankan juga secara manual agar tetap aktif
--- walau GUI tidak memanggil Callback saat toggle dibuat.
--- (Aman dipanggil dua kali: loop lama otomatis berhenti.)
+-- Defaults ON — FIXED: respect saved flags from JSON
 -- ============================================================
-SetTrain(true)
-SetThrow(true)
-SetRebirth(true)
-startPlane(true)
-startTrail(true)
 
-Notify("Script Loaded", "Paper Plane Auto v13 initialized!", 5)
+task.defer(function()
+    -- Wait for GUI to finish loading saved flags from settings_v17.json
+    task.wait(0.5)
+
+    -- Read saved flags; nil means first run → default true
+    local function ReadFlag(flag, default)
+        local ok, val = pcall(function() return GUI:GetFlag(flag) end)
+        if not ok or val == nil then return default end
+        return val
+    end
+
+    local flagTrain    = ReadFlag("AutoTrain",          true)
+    local flagThrow    = ReadFlag("AutoThrow",          true)
+    local flagRebirth  = ReadFlag("AutoRebirth",        true)
+    local flagBat    = ReadFlag("AutoUpgradeBat",   true)
+    local flagTrail    = ReadFlag("AutoUpgradeTrail",   true)
+    local flagTeleport = ReadFlag("TrainUseTeleport",   true)
+
+    cfg.TrainUseTeleport = flagTeleport
+
+    SetTrain(flagTrain)
+    SetThrow(flagThrow)
+    SetRebirth(flagRebirth)
+    startBat(flagBat)
+    startTrail(flagTrail)
+
+    Notify("BulbGui Loaded", "Script v17 loaded!", 5)
+end)
