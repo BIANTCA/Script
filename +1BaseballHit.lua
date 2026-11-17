@@ -193,13 +193,13 @@ do
     end
 end
 
-local BatList = {}
+local PlaneList = {}
 do
-    local c = SafeRequire({"Config", "BatConfig"})
-    if c and c.Bats then
-        for _, b in ipairs(c.Bats) do
+    local c = SafeRequire({"Config", "PlaneConfig"})
+    if c and c.Planes then
+        for _, b in ipairs(c.Planes) do
             if not b.RobuxPass and not b.Exclusive and (b.TrophyPrice or b.ExpPrice) then
-                table.insert(BatList, {
+                table.insert(PlaneList, {
                     Id          = b.Id,
                     World       = b.World or 1,
                     Level       = b.Level or 0,
@@ -209,17 +209,17 @@ do
             end
         end
     end
-    if #BatList == 0 then
+    if #PlaneList == 0 then
         local fallback = {
-            {"WoodBat", 0}, {"MapleBat", 50}, {"AluminumBat", 75}, {"BlackInkBat", 150},
-            {"CandyCaneBat", 300}, {"GoldenBat", 600}, {"IceBat", 1500}, {"LavaBat", 4500},
-            {"GalaxyBat", 14000}, {"RainbowLegendBat", 40000},
+            {"WoodPlane", 0}, {"MaplePlane", 50}, {"AluminumPlane", 75}, {"BlackInkPlane", 150},
+            {"CandyCanePlane", 300}, {"GoldenPlane", 600}, {"IcePlane", 1500}, {"LavaPlane", 4500},
+            {"GalaxyPlane", 14000}, {"RainbowLegendPlane", 40000},
         }
         for i, f in ipairs(fallback) do
-            table.insert(BatList, {Id = f[1], World = 1, Level = i, TrophyPrice = f[2], ExpPrice = 0})
+            table.insert(PlaneList, {Id = f[1], World = 1, Level = i, TrophyPrice = f[2], ExpPrice = 0})
         end
     end
-    table.sort(BatList, function(a, b)
+    table.sort(PlaneList, function(a, b)
         if a.TrophyPrice ~= b.TrophyPrice then return a.TrophyPrice < b.TrophyPrice end
         return a.Level < b.Level
     end)
@@ -255,8 +255,8 @@ local cfg = {
     RebirthDelay     = 2,
     TapDelay         = 0.2,
     UpgradeDelay     = 30,
-    BatCheckDelay  = 1,
-    AutoEquipBat   = true,
+    PlaneCheckDelay  = 1,
+    AutoEquipPlane   = true,
     TrailCheckDelay  = 1,
     AutoEquipTrail   = true,
     EggId            = "",
@@ -748,7 +748,7 @@ tabFarm:CreateToggle({
 
 tabFarm:CreateToggle({
     Name         = "Auto Throw",
-    Description  = "Throw the Bat on loop",
+    Description  = "Throw the Plane on loop",
     CurrentValue = true,
     Flag         = "AutoThrow",
     Callback     = DelayedToggle(SetThrow)
@@ -783,18 +783,18 @@ tabShop:CreateSection({Name = "Upgrades"})
 
 local shopStatus = NewParagraph(tabShop, "Upgrade Status", "Bat: Idle\nTrail: Idle")
 
-local BatText, trailText, lastShopText = "Idle", "Idle", ""
+local PlaneText, trailText, lastShopText = "Idle", "Idle", ""
 
 local function RefreshShopStatus()
-    local text = "Bat: " .. BatText .. "\nTrail: " .. trailText
+    local text = "Bat: " .. PlaneText .. "\nTrail: " .. trailText
     if text ~= lastShopText then
         lastShopText = text
         shopStatus:Set(text)
     end
 end
 
-local function SetBatStatus(text)
-    BatText = (text:gsub("\n", " | "))
+local function SetPlaneStatus(text)
+    PlaneText = (text:gsub("\n", " | "))
     RefreshShopStatus()
 end
 
@@ -803,10 +803,10 @@ local function SetTrailStatus(text)
     RefreshShopStatus()
 end
 
-local function NextBat(d)
+local function NextPlane(d)
     local unlocked = d.UnlockedWorld or 1
-    local owned    = d.OwnedBats   or {}
-    for _, p in ipairs(BatList) do
+    local owned    = d.OwnedPlanes   or {}
+    for _, p in ipairs(PlaneList) do
         if not owned[p.Id] and p.World <= unlocked then return p end
     end
     return nil
@@ -814,24 +814,24 @@ end
 
 local lastBuyId, lastBuyTime = nil, 0
 
-local function BatUpgradeStep()
+local function PlaneUpgradeStep()
     local d = GetData()
-    if not d then SetBatStatus("Waiting for player data...") return end
-    local p = NextBat(d)
-    if not p then SetBatStatus("All Bats owned") return end
+    if not d then SetPlaneStatus("Waiting for player data...") return end
+    local p = NextPlane(d)
+    if not p then SetPlaneStatus("All Bats owned") return end
     local trophies  = d.Trophies or 0
     local exp       = d.Exp      or 0
     local canAfford = trophies >= p.TrophyPrice and exp >= p.ExpPrice
     if canAfford then
         if lastBuyId == p.Id and os.clock() - lastBuyTime < 3 then return end
         lastBuyId, lastBuyTime = p.Id, os.clock()
-        SetBatStatus("Buying " .. p.Id .. "...")
+        SetPlaneStatus("Buying " .. p.Id .. "...")
         Call("BuyBat", p.Id)
         task.wait(0.5)
-        if cfg.AutoEquipBat then Call("EquipBat", p.Id) end
+        if cfg.AutoEquipPlane then Call("EquipBat", p.Id) end
         Notify("Bat", "Bought " .. p.Id .. " (" .. Short(p.TrophyPrice) .. ")")
     else
-        SetBatStatus("Next: " .. p.Id .. "\nPrice: " .. Short(p.TrophyPrice) .. " | Have: " .. Short(trophies))
+        SetPlaneStatus("Next: " .. p.Id .. "\nPrice: " .. Short(p.TrophyPrice) .. " | Have: " .. Short(trophies))
     end
 end
 
@@ -862,19 +862,19 @@ local function TrailUpgradeStep()
     end
 end
 
-local startBat = AutoLoop("BatUpgrade",
-    function() return cfg.BatCheckDelay end,
-    BatUpgradeStep)
+local startPlane = AutoLoop("PlaneUpgrade",
+    function() return cfg.PlaneCheckDelay end,
+    PlaneUpgradeStep)
 local startTrail = AutoLoop("TrailUpgrade",
     function() return cfg.TrailCheckDelay end,
     TrailUpgradeStep)
 
 tabShop:CreateToggle({
-    Name         = "Auto Upgrade Bat",
-    Description  = "Buy the cheapest new Bat",
+    Name         = "Auto Upgrade Plane",
+    Description  = "Buy the cheapest new Plane",
     CurrentValue = true,
-    Flag         = "AutoUpgradeBat",
-    Callback     = DelayedToggle(startBat)
+    Flag         = "AutoUpgradePlane",
+    Callback     = DelayedToggle(startPlane)
 })
 
 tabShop:CreateToggle({
@@ -977,7 +977,7 @@ task.defer(function()
     local flagTrain    = ReadFlag("AutoTrain",          true)
     local flagThrow    = ReadFlag("AutoThrow",          true)
     local flagRebirth  = ReadFlag("AutoRebirth",        true)
-    local flagBat    = ReadFlag("AutoUpgradeBat",   true)
+    local flagPlane    = ReadFlag("AutoUpgradePlane",   true)
     local flagTrail    = ReadFlag("AutoUpgradeTrail",   true)
     local flagTeleport = ReadFlag("TrainUseTeleport",   true)
 
@@ -986,7 +986,7 @@ task.defer(function()
     SetTrain(flagTrain)
     SetThrow(flagThrow)
     SetRebirth(flagRebirth)
-    startBat(flagBat)
+    startPlane(flagPlane)
     startTrail(flagTrail)
 
     Notify("BulbGui Loaded", "Script v17 loaded!", 5)
