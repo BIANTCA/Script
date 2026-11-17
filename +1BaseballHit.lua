@@ -741,7 +741,7 @@ end)
 tabFarm:CreateToggle({
     Name         = "Auto Train",
     Description  = "Train on the best pad",
-    CurrentValue = true,
+    CurrentValue = false,
     Flag         = "AutoTrain",
     Callback     = DelayedToggle(SetTrain)
 })
@@ -749,7 +749,7 @@ tabFarm:CreateToggle({
 tabFarm:CreateToggle({
     Name         = "Auto Throw",
     Description  = "Throw the Plane on loop",
-    CurrentValue = true,
+    CurrentValue = false,
     Flag         = "AutoThrow",
     Callback     = DelayedToggle(SetThrow)
 })
