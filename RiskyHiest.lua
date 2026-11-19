@@ -1,9 +1,3 @@
--- ============================================================
--- Heist Farm v3
--- Auto Farm toggle and its functions come from the v2 script.
--- GUI: BulbGui. All UI text is simple English.
--- ============================================================
-
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -11,9 +5,7 @@ local TweenService = game:GetService("TweenService")
 local LP = Players.LocalPlayer
 local PlayerScripts = LP:WaitForChild("PlayerScripts")
 
--- ================= UI LIBRARY (BulbGui) =================
-local RobloxGui = loadstring(game:HttpGet("https://pastebin.com/raw/2BGUWvbd"))()
-local Gui = RobloxGui
+local Gui = loadstring(game:HttpGet("https://pastebin.com/raw/2BGUWvbd"))()
 Gui:Init{
     Name = "Heist Farm",
     Subtitle = "Auto farm, auto economy, auto sell",
@@ -21,7 +13,6 @@ Gui:Init{
     FileName = "heistfarm_v3.json"
 }
 
--- ================= SAFE HELPERS =================
 local function tryReq(path)
     if not path or not path:IsA("ModuleScript") then return nil end
     local ok, res = pcall(require, path)
@@ -57,7 +48,6 @@ local function invoke(r, ...)
     return ok, res
 end
 
--- ================= GAME MODULES / CONFIG =================
 local Shared = RS:WaitForChild("Shared")
 local Config = tryReq(Shared:WaitForChild("Config", 10))
 local Modules = Shared:FindFirstChild("Modules")
@@ -101,7 +91,6 @@ local function isBusy()
     return false
 end
 
--- ================= REMOTES =================
 local TypedRemote = Shared:WaitForChild("Packages"):WaitForChild("TypedRemote")
 local Bank = tryReq(RS:FindFirstChild("RemoteBank"))
 
@@ -125,7 +114,6 @@ local SellItems             = remote("SellItems")
 local RequestTeleport       = remote("RequestTeleport")
 local StageTreasuresReset   = remote("StageTreasuresReset")
 
--- ================= TOTAL STAGES =================
 local TOTAL = 1
 do
     if Config and type(Config.Stages) == "table" then
@@ -145,7 +133,6 @@ local TreasureItems = (Config and Config.Treasures and Config.Treasures.Items) o
 local VariantCfg = (Config and Config.Variants) or {}
 local DoorCfg = (Config and Config.Doors) or {SwingInterval = 0.5, HitDelay = 0.25}
 
--- ================= STATE =================
 local S = {
     Run = false,
     AutoStage = false,
@@ -161,6 +148,7 @@ local S = {
     Capacity = 1,
     Delay = 0.4,
     HoldTime = 0.15,
+    SellWait = 1,
 
     MoveMode = "Tween",
     TweenSpeed = 60,
@@ -170,7 +158,6 @@ local S = {
     UpgradeList = {"Backpack"},
     BasePos = nil,
 
-    Banking = false,
     PlaceMode = 1,
     SellMode = 1,
 }
@@ -182,7 +169,6 @@ local spawnCache = {}
 local lastRaw = nil
 local loopThread = nil
 
--- server signals
 if DoorBroken then
     pcall(function()
         DoorBroken.OnClientEvent:Connect(function() BrokenCount += 1 end)
@@ -205,18 +191,15 @@ if StageTreasuresReset then
     end)
 end
 
--- ================= UI TABS =================
-local MainTab = Gui:CreateTab("Main")
-local EcoTab = Gui:CreateTab("Economy")
+local MainTab = Gui:CreateTab("Auto Farm")
 local MoveTab = Gui:CreateTab("Movement")
 local ToolTab = Gui:CreateTab("Tools")
 
-local _, _, _, StatusCtl = MainTab:CreateParagraph{Title = "Status", Content = "Idle"}
-local _, _, _, InfoCtl = MainTab:CreateParagraph{Title = "Stage Info", Content = "-"}
+local _, _, _, StatusCtl = Gui:CreateSettingsParagraph{Title = "Status", Content = "Idle"}
+local _, _, _, InfoCtl = Gui:CreateSettingsParagraph{Title = "Stage Info", Content = "-"}
 local function setStatus(t) pcall(function() StatusCtl:SetContent(t) end) end
 local function setInfo(t) pcall(function() InfoCtl:SetContent(t) end) end
 
--- ================= CHARACTER / MOVEMENT =================
 local function root()
     local c = LP.Character
     return c and c:FindFirstChild("HumanoidRootPart") or nil
@@ -279,7 +262,6 @@ do
     end
 end
 
--- ================= BACKPACK (carried) vs INVENTORY (banked) =================
 local function carriedItems()
     local out = {}
     local containers = {LP:FindFirstChildOfClass("Backpack"), LP.Character}
@@ -355,7 +337,14 @@ local function isSellable(it)
     return tc ~= nil
 end
 
--- ================= ARMS =================
+local function sellableCount()
+    local n = 0
+    for _, it in ipairs(inventoryItems()) do
+        if isSellable(it) then n += 1 end
+    end
+    return n
+end
+
 local armsCache, armsCacheT = nil, 0
 local function armsList()
     local now = os.clock()
@@ -468,7 +457,6 @@ local function buyNextArm()
     end
 end
 
--- ================= TOWER / STAGES =================
 local function isGuid(s)
     return type(s) == "string" and #s == 36 and s:match("^%x+%-%x+%-%x+%-%x+%-%x+$") ~= nil
 end
@@ -643,7 +631,7 @@ end
 local function fetchTreasures()
     lastRaw = nil
     local out = {}
-    if not RequestStageTreasures then return out, "remote missing" end
+    if not RequestStageTreasures then return nil, "remote missing" end
     local ok, data = invoke(RequestStageTreasures)
     if not ok then return nil, tostring(data) end
     lastRaw = data
@@ -677,7 +665,6 @@ local function holdFor(t)
     return S.HoldTime
 end
 
--- ================= PLACE =================
 local function placeAll(n)
     if not PlaceBestLuck then return end
     for _ = 1, math.max(n, 1) do
@@ -686,153 +673,6 @@ local function placeAll(n)
     end
 end
 
--- ================= AUTO STAGE =================
-local function standAndBreak(n, hits)
-    local zone = zoneOf(n)
-    if not zone then return "nozone" end
-    local pos = instPos(zone)
-    if not pos then return "nozone" end
-    local door = doorOf(n)
-    local base = snapshot(door)
-    local sig = BrokenCount
-    moveTo(CFrame.new(pos))
-    local limit = hits * (DoorCfg.SwingInterval or 0.5) + (DoorCfg.HitDelay or 0.25) + 4
-    local t0 = os.clock()
-    while S.AutoStage and os.clock() - t0 < limit do
-        if BrokenCount > sig or isBroken(door, base) then
-            brokenStages[n] = true
-            return "broken"
-        end
-        local r = root()
-        if r and (r.Position - pos).Magnitude > 8 then
-            moveTo(CFrame.new(pos))
-        end
-        task.wait(0.2)
-    end
-    brokenStages[n] = true
-    return "timeout"
-end
-
-local function progressStages()
-    local power = armPower()
-    local total = stageCount()
-    while S.AutoStage and S.NextStage <= total do
-        local n = S.NextStage
-        if n < S.MinStage then S.NextStage = S.MinStage n = S.NextStage end
-        if brokenStages[n] or not doorOf(n) then
-            S.NextStage = n + 1
-            continue
-        end
-        local health = stageHealth(n)
-        local doorHits = stageDoorHits(n)
-        if not health and not doorHits then
-            S.Blocked = n
-            setInfo(string.format("Stage %d: no DoorHealth/DoorHits in config", n))
-            return
-        end
-        local need
-        if health and power > 0 then
-            need = math.ceil(health / power)
-        else
-            need = doorHits or S.MaxHits
-        end
-        if need > S.MaxHits then
-            S.Blocked = n
-            setInfo(string.format(
-                "Stopped at Stage %d | Health %s | Power %s | Needs %d hits (max %d)",
-                n, tostring(health), tostring(power), need, S.MaxHits
-            ))
-            return
-        end
-        S.Blocked = nil
-        setInfo(string.format("Stage %d | Health %s | Power %s | Needs %d hits", n, tostring(health), tostring(power), need))
-        setStatus("Standing in Zone of Stage" .. n)
-        local res = standAndBreak(n, need)
-        setStatus("Stage" .. n .. ": " .. res)
-        S.NextStage = n + 1
-    end
-    if S.NextStage > total then
-        setInfo("All doors done (" .. total .. " stages)")
-    end
-end
-
--- ================= LOOT =================
-local function loot()
-    setStatus("Getting treasure list...")
-    local list, err = fetchTreasures()
-    if not list then
-        setStatus("Request failed: " .. tostring(err))
-        task.wait(2)
-        return
-    end
-
-    local candidates = {}
-    for _, t in ipairs(list) do
-        local bl = Blacklist.Pickup[t.id]
-        local blocked = bl and os.clock() < bl
-        local inRange = (not t.stage) or (t.stage >= S.MinStage and t.stage <= S.MaxStage)
-        if not blocked and inRange then
-            local inst = findSpawn(t.stage, t.spawn)
-            if inst then
-                t.inst = inst
-                if not t.stage then
-                    local p = inst
-                    while p and p ~= workspace do
-                        local n = tonumber(p.Name:match("^Stage(%d+)$"))
-                        if n then t.stage = n break end
-                        p = p.Parent
-                    end
-                end
-                if not t.key then t.key = keyOf(inst) end
-                t.income, t.value = incomeOf(t.key, t.variant)
-                if t.stage and t.stage >= S.MinStage and t.stage <= S.MaxStage then
-                    table.insert(candidates, t)
-                end
-            end
-        end
-    end
-
-    table.sort(candidates, function(a, b)
-        if a.income ~= b.income then return a.income > b.income end
-        return a.value > b.value
-    end)
-
-    if #candidates == 0 then
-        setStatus("No treasures found (" .. #list .. " read). Try Dump Treasures.")
-        task.wait(2)
-        return
-    end
-
-    local cap = capacity()
-    local picked = 0
-    for _, t in ipairs(candidates) do
-        if not S.Run or picked >= cap then break end
-        local pos = instPos(t.inst)
-        if not pos then continue end
-        setStatus(string.format("Getting %s (Stage %s, income %s)", tostring(t.key or "?"), tostring(t.stage), tostring(t.income)))
-        moveTo(CFrame.new(pos + Vector3.new(0, 3, 0)))
-        task.wait(holdFor(t))
-        local ok, res = invoke(PickupStageTreasure, t.stage, t.spawn, t.id)
-        if ok and res ~= false then
-            picked += 1
-            setStatus("Pickup OK: " .. tostring(t.key) .. " | res=" .. tostring(res))
-        else
-            Blacklist.Pickup[t.id] = os.clock() + 15
-            setStatus("Pickup failed: " .. tostring(t.key) .. " | res=" .. tostring(res))
-        end
-        task.wait(S.Delay)
-    end
-
-    if picked > 0 and S.Run then
-        setStatus("Going back to base and placing best...")
-        if S.BasePos then moveTo(S.BasePos) end
-        task.wait(0.4)
-        placeAll(picked)
-        task.wait(0.3)
-    end
-end
-
--- ================= BASE / BANK / SELL =================
 local function returnToBase()
     if RequestTeleport then
         invoke(RequestTeleport, "Base")
@@ -843,7 +683,6 @@ local function returnToBase()
         end
     end
     if S.BasePos then
-        notify("Base", "Going back to base")
         return moveHumanoid(S.BasePos.Position, S.HoldTime)
     end
     notify("Base", "No base saved. Use Set Base Here first.")
@@ -964,8 +803,7 @@ local function sellAll()
         if isSellable(it) then table.insert(uuids, tostring(it.UUID)) end
     end
     if #uuids == 0 then
-        notify("Sell", "Nothing sellable (favorites and Exclusive are protected)")
-        return
+        return true
     end
     local before = #items
 
@@ -990,14 +828,181 @@ local function sellAll()
         end
         if sold() then
             S.SellMode = mode
-            notify("Sell", "Sold items, left: " .. #inventoryItems())
-            return
+            return true
         end
     end
-    notify("Sell", "Sell sent, left in inventory: " .. #inventoryItems())
+    return false
 end
 
--- ================= ECONOMY =================
+local function waitSold(timeout)
+    local t0 = os.clock()
+    while sellableCount() > 0 and os.clock() - t0 < (timeout or 10) do
+        task.wait(0.25)
+    end
+    return sellableCount() == 0
+end
+
+local function sellAndWait()
+    setStatus("Selling items...")
+    sellAll()
+    local done = waitSold(10)
+    if done then
+        setStatus("Sold. Continuing auto farm...")
+        notify("Sell", "All sold, continuing farm")
+    else
+        setStatus("Some items not sold. Continuing auto farm...")
+        notify("Sell", "Some items left, continuing farm")
+    end
+end
+
+local function standAndBreak(n, hits)
+    local zone = zoneOf(n)
+    if not zone then return "nozone" end
+    local pos = instPos(zone)
+    if not pos then return "nozone" end
+    local door = doorOf(n)
+    local base = snapshot(door)
+    local sig = BrokenCount
+    moveTo(CFrame.new(pos))
+    local limit = hits * (DoorCfg.SwingInterval or 0.5) + (DoorCfg.HitDelay or 0.25) + 4
+    local t0 = os.clock()
+    while S.AutoStage and os.clock() - t0 < limit do
+        if BrokenCount > sig or isBroken(door, base) then
+            brokenStages[n] = true
+            return "broken"
+        end
+        local r = root()
+        if r and (r.Position - pos).Magnitude > 8 then
+            moveTo(CFrame.new(pos))
+        end
+        task.wait(0.2)
+    end
+    brokenStages[n] = true
+    return "timeout"
+end
+
+local function progressStages()
+    local power = armPower()
+    local total = stageCount()
+    while S.AutoStage and S.NextStage <= total do
+        local n = S.NextStage
+        if n < S.MinStage then S.NextStage = S.MinStage n = S.NextStage end
+        if brokenStages[n] or not doorOf(n) then
+            S.NextStage = n + 1
+            continue
+        end
+        local health = stageHealth(n)
+        local doorHits = stageDoorHits(n)
+        if not health and not doorHits then
+            S.Blocked = n
+            setInfo(string.format("Stage %d: no DoorHealth/DoorHits in config", n))
+            return
+        end
+        local need
+        if health and power > 0 then
+            need = math.ceil(health / power)
+        else
+            need = doorHits or S.MaxHits
+        end
+        if need > S.MaxHits then
+            S.Blocked = n
+            setInfo(string.format(
+                "Stopped at Stage %d | Health %s | Power %s | Needs %d hits (max %d)",
+                n, tostring(health), tostring(power), need, S.MaxHits
+            ))
+            return
+        end
+        S.Blocked = nil
+        setInfo(string.format("Stage %d | Health %s | Power %s | Needs %d hits", n, tostring(health), tostring(power), need))
+        setStatus("Standing in Zone of Stage" .. n)
+        local res = standAndBreak(n, need)
+        setStatus("Stage" .. n .. ": " .. res)
+        S.NextStage = n + 1
+    end
+    if S.NextStage > total then
+        setInfo("All doors done (" .. total .. " stages)")
+    end
+end
+
+local function loot()
+    setStatus("Getting treasure list...")
+    local list, err = fetchTreasures()
+    if not list then
+        setStatus("Request failed: " .. tostring(err))
+        task.wait(2)
+        return 0
+    end
+
+    local candidates = {}
+    for _, t in ipairs(list) do
+        local bl = Blacklist.Pickup[t.id]
+        local blocked = bl and os.clock() < bl
+        local inRange = (not t.stage) or (t.stage >= S.MinStage and t.stage <= S.MaxStage)
+        if not blocked and inRange then
+            local inst = findSpawn(t.stage, t.spawn)
+            if inst then
+                t.inst = inst
+                if not t.stage then
+                    local p = inst
+                    while p and p ~= workspace do
+                        local n = tonumber(p.Name:match("^Stage(%d+)$"))
+                        if n then t.stage = n break end
+                        p = p.Parent
+                    end
+                end
+                if not t.key then t.key = keyOf(inst) end
+                t.income, t.value = incomeOf(t.key, t.variant)
+                if t.stage and t.stage >= S.MinStage and t.stage <= S.MaxStage then
+                    table.insert(candidates, t)
+                end
+            end
+        end
+    end
+
+    table.sort(candidates, function(a, b)
+        if a.income ~= b.income then return a.income > b.income end
+        return a.value > b.value
+    end)
+
+    if #candidates == 0 then
+        setStatus("No treasures found (" .. #list .. " read). Try Dump Treasures.")
+        task.wait(2)
+        return 0
+    end
+
+    local cap = capacity()
+    local picked = 0
+    for _, t in ipairs(candidates) do
+        if not S.Run or picked >= cap then break end
+        local pos = instPos(t.inst)
+        if not pos then continue end
+        setStatus(string.format("Getting %s (Stage %s, income %s)", tostring(t.key or "?"), tostring(t.stage), tostring(t.income)))
+        moveTo(CFrame.new(pos + Vector3.new(0, 3, 0)))
+        task.wait(holdFor(t))
+        local ok, res = invoke(PickupStageTreasure, t.stage, t.spawn, t.id)
+        if ok and res ~= false then
+            picked += 1
+            setStatus("Pickup OK: " .. tostring(t.key) .. " | res=" .. tostring(res))
+        else
+            Blacklist.Pickup[t.id] = os.clock() + 15
+            setStatus("Pickup failed: " .. tostring(t.key) .. " | res=" .. tostring(res))
+        end
+        task.wait(S.Delay)
+    end
+
+    if picked > 0 and S.Run then
+        setStatus("Going back to base...")
+        returnToBase()
+        setStatus("Waiting for items to bank...")
+        waitBanked(10)
+        setStatus("Placing best items...")
+        placeAll(picked)
+        task.wait(0.3)
+    end
+
+    return picked
+end
+
 local function buyUpgrades(d)
     if not PurchaseUpgrade then return end
     for _, name in ipairs(S.UpgradeList) do
@@ -1087,7 +1092,6 @@ local function econTick()
     if S.AutoRebirth then pcall(doRebirth, d) end
 end
 
--- ================= MAIN LOOPS =================
 local function cycle()
     local hrp = root()
     if not hrp then
@@ -1099,7 +1103,14 @@ local function cycle()
     if not S.BasePos then saveBase(hrp.CFrame) end
     S.MaxStage = stageCount()
     if S.AutoStage then progressStages() end
-    if S.Run then loot() end
+    if S.Run then
+        local picked = loot()
+        if picked and picked > 0 and S.Run and S.AutoSell then
+            setStatus("Farm done. Waiting " .. S.SellWait .. " second...")
+            task.wait(S.SellWait)
+            if S.Run then sellAndWait() end
+        end
+    end
 end
 
 local function start()
@@ -1132,18 +1143,33 @@ LP.CharacterAdded:Connect(function()
     brokenStages = {}
 end)
 
--- ================= UI =================
-MainTab:CreateParagraph{
+Gui:CreateSettingsParagraph{
     Title = "Fixed settings",
     Content = "Max Hits = 10 | Min Stage = 1 | Max Stage = " .. TOTAL
-        .. " | Capacity = Backpack upgrade (1-4) | Delay = 0.4 | Hold Time = 0.15 | Auto Stage follows Auto Farm"
+        .. " | Capacity = Backpack upgrade | Delay = 0.4 | Hold Time = 0.15 | Sell Wait = 1s"
+}
+Gui:CreateSettingsParagraph{
+    Title = "Arms info",
+    Content = "Buys the next arm when cash is enough, equips it right away, and keeps the best arm equipped. Skips Robux-only arms."
+}
+Gui:CreateSettingsParagraph{
+    Title = "Upgrades info",
+    Content = "Default list: Backpack. Pick more in the dropdown. Every buy is checked by level change."
+}
+Gui:CreateSettingsParagraph{
+    Title = "Auto Sell info",
+    Content = "After each farm round: go to base, place best items, wait 1 second, sell the rest, wait until sold, then farm again. Favorites and Exclusive items are never sold."
+}
+Gui:CreateSettingsParagraph{
+    Title = "Movement info",
+    Content = "Hold Time = 0.15 (fixed). Farming pauses automatically while Jailed or Ziplining."
 }
 
-MainTab:CreateSection({Name = "Auto Farm", Description = "Auto Stage first, then pick up the best income treasures"})
+MainTab:CreateSection({Name = "Auto Farm", Description = "Farm, wait 1 second, sell, then farm again"})
 
 MainTab:CreateToggle{
     Name = "Auto Farm",
-    Description = "Auto Stage + pick up best income > base > Place Best",
+    Description = "Breaks doors, picks up best treasures, goes to base, then repeats",
     Flag = "AutoFarm",
     CurrentValue = false,
     Callback = function(v)
@@ -1155,34 +1181,41 @@ MainTab:CreateToggle{
             task.spawn(function()
                 returnToBase()
                 waitBanked(10)
+                task.wait(S.SellWait)
                 placeBest()
-                sellAll()
+                sellAndWait()
             end)
         end
     end
 }
 
-EcoTab:CreateSection("Arms")
-EcoTab:CreateToggle{
+MainTab:CreateToggle{
+    Name = "Auto Sell",
+    Description = "Sells your items after each farm round",
+    Flag = "AutoSell",
+    CurrentValue = false,
+    Callback = function(v) S.AutoSell = v and true or false end
+}
+
+MainTab:CreateToggle{
     Name = "Auto Unlock Arms",
+    Description = "Buys and equips the next arm when you have enough cash",
     Flag = "AutoArms",
     CurrentValue = true,
     Callback = function(v) S.AutoArms = v and true or false end
 }
-EcoTab:CreateParagraph{
-    Title = "Arms info",
-    Content = "Uses the game's next-unlock order (Dirt -> Wood -> ... -> Nuclear). Skips Robux-only arms (TNT). Buys when cash is enough, equips right away, and keeps the best arm equipped."
-}
 
-EcoTab:CreateSection("Upgrades")
-EcoTab:CreateToggle{
+MainTab:CreateToggle{
     Name = "Auto Buy Upgrades",
+    Description = "Buys the selected upgrades when you have enough cash",
     Flag = "AutoUpgrades",
     CurrentValue = false,
     Callback = function(v) S.AutoUpgrades = v and true or false end
 }
-EcoTab:CreateDropdown{
+
+MainTab:CreateDropdown{
     Name = "Upgrade List",
+    Description = "Choose which upgrades to buy automatically",
     Flag = "UpgradeList",
     Options = {"Backpack", "MoveSpeed", "PickupSpeed"},
     MultipleOptions = true,
@@ -1202,39 +1235,26 @@ EcoTab:CreateDropdown{
         if #list > 0 then S.UpgradeList = list end
     end
 }
-EcoTab:CreateParagraph{
-    Title = "Upgrades info",
-    Content = "Default list: Backpack. Pick more in the dropdown. PurchaseUpgrade is a RemoteFunction, every buy is checked by level change."
-}
 
-EcoTab:CreateSection("Plot and Rebirth")
-EcoTab:CreateToggle{
+MainTab:CreateToggle{
     Name = "Auto Upgrade Plot",
+    Description = "Upgrades your plot when you have enough cash",
     Flag = "AutoPlot",
     CurrentValue = false,
     Callback = function(v) S.AutoPlot = v and true or false end
 }
-EcoTab:CreateToggle{
+
+MainTab:CreateToggle{
     Name = "Auto Rebirth",
+    Description = "Rebirths when you have enough cash",
     Flag = "AutoRebirth",
     CurrentValue = false,
     Callback = function(v) S.AutoRebirth = v and true or false end
 }
 
-EcoTab:CreateSection("Sell")
-EcoTab:CreateToggle{
-    Name = "Auto Sell",
-    Flag = "AutoSell",
-    CurrentValue = false,
-    Callback = function(v) S.AutoSell = v and true or false end
-}
-EcoTab:CreateParagraph{
-    Title = "Auto Sell info",
-    Content = "When Auto Farm turns OFF: go back to base, wait for banking, place best items (PlaceBestLuck), then sell the rest. Favorites and Exclusive items are never sold."
-}
-
 MoveTab:CreateDropdown{
     Name = "Move Mode",
+    Description = "Choose how your character moves",
     Flag = "MoveMode",
     Options = {"Tween", "Instant"},
     CurrentOption = "Tween",
@@ -1242,8 +1262,10 @@ MoveTab:CreateDropdown{
         if type(v) == "string" then S.MoveMode = v end
     end
 }
+
 MoveTab:CreateSlider{
     Name = "Tween Speed",
+    Description = "How fast you move when Tween mode is on",
     Flag = "TweenSpeed",
     Range = {16, 200},
     Increment = 1,
@@ -1251,14 +1273,13 @@ MoveTab:CreateSlider{
     Suffix = " studs/s",
     Callback = function(v) S.TweenSpeed = tonumber(v) or 60 end
 }
-MoveTab:CreateParagraph{
-    Title = "Fixed",
-    Content = "Hold Time = 0.15 (fixed). Farming pauses automatically while Jailed or Ziplining."
-}
 
 ToolTab:CreateSection("Base")
+
 ToolTab:CreateButton{
     Name = "Set Base Here",
+    Description = "Saves your current position as your base",
+    Interact = "Set",
     Callback = function()
         local hrp = root()
         if hrp then
@@ -1267,12 +1288,18 @@ ToolTab:CreateButton{
         end
     end
 }
+
 ToolTab:CreateButton{
     Name = "Teleport To Base",
+    Description = "Moves you back to your saved base",
+    Interact = "Go",
     Callback = function() task.spawn(returnToBase) end
 }
+
 ToolTab:CreateButton{
-    Name = "Bank Now (go base + wait)",
+    Name = "Bank Now",
+    Description = "Goes to base and waits for items to be banked",
+    Interact = "Bank",
     Callback = function()
         task.spawn(function()
             returnToBase()
@@ -1281,22 +1308,34 @@ ToolTab:CreateButton{
         end)
     end
 }
+
 ToolTab:CreateButton{
     Name = "Place Best Now",
+    Description = "Places your best items on the plot",
+    Interact = "Place",
     Callback = function() task.spawn(placeBest) end
 }
+
 ToolTab:CreateButton{
     Name = "Sell All Now",
-    Callback = function() task.spawn(sellAll) end
+    Description = "Sells all sellable items and waits until sold",
+    Interact = "Sell",
+    Callback = function() task.spawn(sellAndWait) end
 }
+
 ToolTab:CreateButton{
     Name = "Equip Best Arm",
+    Description = "Equips the strongest arm you own",
+    Interact = "Equip",
     Callback = function() task.spawn(equipBestArm) end
 }
 
 ToolTab:CreateSection("Debug")
+
 ToolTab:CreateButton{
     Name = "Dump Treasures",
+    Description = "Prints the treasure list to the console",
+    Interact = "Dump",
     Callback = function()
         local list = fetchTreasures() or {}
         print("=== TREASURE DUMP (" .. #list .. ") ===")
@@ -1307,8 +1346,11 @@ ToolTab:CreateButton{
         notify("Debug", "Treasures dumped to console")
     end
 }
+
 ToolTab:CreateButton{
     Name = "Dump Doors",
+    Description = "Prints door health and hits needed to the console",
+    Interact = "Dump",
     Callback = function()
         print("=== DOOR DUMP ===")
         for n = 1, stageCount() do
@@ -1333,8 +1375,11 @@ ToolTab:CreateButton{
         notify("Debug", "Doors dumped to console")
     end
 }
+
 ToolTab:CreateButton{
     Name = "Dump PlayerData",
+    Description = "Prints your player data to the console",
+    Interact = "Dump",
     Callback = function()
         local d = pData()
         print("=== PLAYERDATA DUMP ===")
@@ -1348,8 +1393,11 @@ ToolTab:CreateButton{
         notify("Debug", "PlayerData dumped to console")
     end
 }
+
 ToolTab:CreateButton{
     Name = "Dump Carried / Inventory",
+    Description = "Prints carried items and banked inventory to the console",
+    Interact = "Dump",
     Callback = function()
         print("=== CARRIED TOOLS (" .. carriedCount() .. "/" .. capacity() .. ") ===")
         for _, t in ipairs(carriedItems()) do
@@ -1365,8 +1413,11 @@ ToolTab:CreateButton{
 }
 
 ToolTab:CreateSection("Stages")
+
 ToolTab:CreateButton{
     Name = "Reset Stage Pointer",
+    Description = "Starts the stage progress again from Stage 1",
+    Interact = "Reset",
     Callback = function()
         S.NextStage = S.MinStage
         S.Blocked = nil
