@@ -269,6 +269,21 @@ local function executeScript(scriptData, onSuccess)
 	end
 end
 
+-- Run button registry: satu tombol + satu status per script (kunci = judul script)
+local runButtons = {}   -- runButtons["Judul Script"] = tombol
+local runStates = {}    -- runStates["Judul Script"] = {running=false, guis={}}
+
+-- Kalau judul sama muncul lagi (misal di search dan favorites), tambah "(2)", "(3)", dst
+local function getKey(title)
+	local key = title
+	local n = 2
+	while runButtons[key] do
+		key = title .. " (" .. n .. ")"
+		n += 1
+	end
+	return key
+end
+
 -- Create script button
 local function createScriptButton(s, isFavorite)
 	local gameName = (s.game and s.game.name) or "Unknown Game"
@@ -282,87 +297,77 @@ local function createScriptButton(s, isFavorite)
 		Content = formatScriptInfo(s)
 	})
 
-	local running = false
-	local spawnedGuis = {}
+	-- Tombol run: nama sesuai judul script, status berjalan sendiri-sendiri
+	local key = getKey(title)
+	runStates[key] = { running = false, guis = {} }
 
-	-- FIX: deklarasi dulu, baru diisi, supaya runButton tidak nil di dalam callback
-	local runButton
-	runButton = ScriptTab:CreateButton({
-		Name = "Run Script",
+	runButtons[key] = ScriptTab:CreateButton({
+		Name = title,
+		Interact = "Run",
 		Callback = function()
-			if not running then
-				executeScript(s, function(guis)
-					spawnedGuis = guis
+			local state = runStates[key]
 
-					if #spawnedGuis == 0 then
+			if not state.running then
+				executeScript(s, function(guis)
+					state.guis = guis
+
+					if #state.guis == 0 then
 						Tumblr:Notify({
 							Title = "Notice",
-							Content = "Script ran but GUI not detected.",
+							Content = title .. ": GUI not detected.",
 							Duration = 3
 						})
 						return
 					end
 
-					running = true
-					runButton:Set("Name", "Delete Script UI")
+					state.running = true
+					runButtons[key]:Set("Interact", "Delete UI")
 
 					Tumblr:Notify({
 						Title = "Success",
-						Content = "Script detected & tracked.",
+						Content = title .. " detected & tracked.",
 						Duration = 3
 					})
 				end)
 			else
-				for _, gui in ipairs(spawnedGuis) do
+				for _, gui in ipairs(state.guis) do
 					pcall(function()
 						gui:Destroy()
 					end)
 				end
 
-				spawnedGuis = {}
-				running = false
-				runButton:Set("Name", "Run Script")
+				state.guis = {}
+				state.running = false
+				runButtons[key]:Set("Interact", "Run")
 
 				Tumblr:Notify({
 					Title = "Removed",
-					Content = "Script UI removed.",
+					Content = title .. " UI removed.",
 					Duration = 3
 				})
 			end
 		end
 	})
 
-	-- FIX: tombol favorite berubah Favorite <-> Unfavorite saat ditekan
+	-- Tombol favorite: berubah Favorite <-> Unfavorite saat ditekan
 	local favButton
 	local function refreshFavButton()
-		if isFavorited(title) then
-			favButton:Set("Name", "★ Favorited")
-			favButton:Set("Interact", "Unfavorite")
-		else
-			favButton:Set("Name", "☆ Not Favorited")
-			favButton:Set("Interact", "Favorite")
-		end
+		local fav = isFavorited(title)
+		favButton:Set("Name", (fav and "★ " or "☆ ") .. title)
+		favButton:Set("Interact", fav and "Unfavorite" or "Favorite")
 	end
 
 	favButton = ScriptTab:CreateButton({
-		Name = isFavorited(title) and "★ Favorited" or "☆ Not Favorited",
+		Name = (isFavorited(title) and "★ " or "☆ ") .. title,
 		Interact = isFavorited(title) and "Unfavorite" or "Favorite",
 		Callback = function()
 			if isFavorited(title) then
 				if removeFromFavorites(title) then
-					Tumblr:Notify({
-						Title = "Removed",
-						Content = "Removed from favorites",
-						Duration = 2
-					})
+					Tumblr:Notify({ Title = "Removed", Content = "Removed from favorites", Duration = 2 })
 				end
 			else
 				if addToFavorites(s) then
-					Tumblr:Notify({
-						Title = "Added",
-						Content = "Added to favorites!",
-						Duration = 2
-					})
+					Tumblr:Notify({ Title = "Added", Content = "Added to favorites!", Duration = 2 })
 				end
 			end
 			refreshFavButton()
