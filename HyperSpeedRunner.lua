@@ -1,12 +1,9 @@
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
-
 local fc = loadstring(game:HttpGet("https://pasteblox.com/raw/87b7cj24z3"))()
-
 local gameName = (fc.getGameName and fc.getGameName()) or "Unknown Game"
 local safeName = tostring(gameName):gsub("[^%w%-_ ]", ""):gsub("^%s+", ""):gsub("%s+$", "")
 if safeName == "" then safeName = "Default" end
-
 local AutoStep = false
 local AutoWin = false
 local AutoRebirth = false
