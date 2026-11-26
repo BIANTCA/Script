@@ -21,11 +21,10 @@ _G.MainTab = MainTab
 local ScriptTab = Window:CreateTab("Script", 4483362458)
 
 Window:CreateSettingsParagraph({
-	Title = "9 February 2026",
-	Content = "NEW: Favorites system! Star your favorite scripts for quick access per game."
+	Title = "Updates !!!",
+	Content = "9 Feb 26 - Favorite Script.\n21 Nov 26 - Make GUI looks simple.\n26 Nov 26 - Auto Script Tab"
 })
 
--- Favorites storage (per GameId)
 local favoriteScripts = {}
 local favoritesFolderName = "TumblrScriptFavorites"
 local favoritesFileName = tostring(game.GameId) .. "_favorites.json"
