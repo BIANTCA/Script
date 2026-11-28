@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local LP = Players.LocalPlayer
+
 local fc = loadstring(game:HttpGet("https://pasteblox.com/raw/87b7cj24z3"))()
 local gameName = (fc.getGameName and fc.getGameName()) or "Unknown Game"
 local safeName = tostring(gameName):gsub("[^%w%-_ ]", ""):gsub("^%s+", ""):gsub("%s+$", "")
@@ -15,174 +16,84 @@ Gui:Init({
 })
 
 -- ==================================================
--- MONEY SUFFIXES (copied from Shared.Format)
--- ==================================================
-local SUFFIXES = {
-    "", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc", "Ud", "Dd", "Td", "Qad",
-    "Qid", "Sxd", "Spd", "Ocd", "Nod", "Vg", "Uvg", "Dvg", "Tvg", "Qavg", "Qivg", "Sxvg",
-    "Spvg", "Ocvg", "Novg", "Tg", "Utg", "Dtg", "Ttg", "Qatg", "Qitg", "Sxtg", "Sptg", "Octg",
-    "Notg", "Qag", "Uqag", "Dqag", "Tqag", "Qaqag", "Qiqag", "Sxqag", "Spqag", "Ocqag", "Noqag",
-    "Qig", "Uqig", "Dqig", "Tqig", "Qaqig", "Qiqig", "Sxqig", "Spqig", "Ocqig", "Noqig", "Sxg",
-    "Usxg", "Dsxg", "Tsxg", "Qasxg", "Qisxg", "Sxsxg", "Spsxg", "Ocsxg", "Nosxg", "Spg", "Uspg",
-    "Dspg", "Tspg", "Qaspg", "Qispg", "Sxspg", "Spspg", "Ocspg", "Nospg", "Ocg", "Uocg", "Docg",
-    "Tocg", "Qaocg", "Qiocg", "Sxocg", "Spocg", "Ococg", "Noocg", "Nog", "Unog", "Dnog", "Tnog",
-    "Qanog", "Qinog", "Sxnog", "Spnog", "Ocnog", "Nonog", "Ce"
-}
-local SUFFIX_POWER = {}
-for i, s in ipairs(SUFFIXES) do SUFFIX_POWER[s] = i - 1 end
-
-local function parseMoney(v)
-    if type(v) == "number" then return v end
-    if type(v) ~= "string" then return nil end
-    local s = v:gsub("[%$,%s]", "")
-    local num, suf = s:match("^(%d*%.?%d+)(%a*)$")
-    if not num then return nil end
-    local p = SUFFIX_POWER[suf]
-    if p == nil then return nil end
-    return tonumber(num) * (1000 ^ p)
-end
-
-local function getCash()
-    local ls = LP:FindFirstChild("leaderstats")
-    local c = ls and ls:FindFirstChild("Cash")
-    if not c then return nil end
-    return parseMoney(c.Value)
-end
-
--- ==================================================
 -- HELPERS
 -- ==================================================
 local KnitRemotes = RS:WaitForChild("KnitRemotes", 10)
+
+local function notify(title, content)
+    Gui:Notify({Title = title, Content = content, Duration = 2})
+end
 
 local function remote(service, name)
     local s = KnitRemotes and KnitRemotes:FindFirstChild(service)
     return s and s:FindFirstChild(name)
 end
 
-local function getPos(o)
-    if o:IsA("Model") then return o:GetPivot().Position end
-    if o:IsA("BasePart") then return o.Position end
+-- Calls a Knit RemoteFunction safely. Returns ok, result.
+local function call(service, name, ...)
+    local r = remote(service, name)
+    if not r then return false, "missing remote " .. service .. "." .. name end
+    return pcall(r.InvokeServer, r, ...)
 end
 
 local function getHRP()
     return LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
 end
 
-local myBase
-local function getMyBase(force)
-    if myBase and myBase.Parent and not force then return myBase end
-    local hrp, bases = getHRP(), workspace:FindFirstChild("Bases")
-    if not hrp or not bases then return nil end
-    local best, bestDist = nil, math.huge
-    for _, base in ipairs(bases:GetChildren()) do
-        local items = base:FindFirstChild("Items")
-        if items then
-            for _, it in ipairs(items:GetChildren()) do
-                local p = getPos(it)
-                if p then
-                    local d = (p - hrp.Position).Magnitude
-                    if d < bestDist then best, bestDist = base, d end
-                end
-            end
-        end
-    end
-    myBase = best
-    return myBase
+local function getCash()
+    local c = LP:GetAttribute("Cash")
+    return type(c) == "number" and c or 0
 end
 
-local function getMyItems()
+-- Finds the base owned by the local player (BaseName attribute, then OwnerUserId).
+local myBase
+local function getMyBase()
+    if myBase and myBase.Parent then return myBase end
+    local bases = workspace:FindFirstChild("Bases")
+    if not bases then return nil end
+    local name = LP:GetAttribute("BaseName")
+    local byName = name and bases:FindFirstChild(name)
+    if byName then
+        myBase = byName
+        return myBase
+    end
+    for _, base in ipairs(bases:GetChildren()) do
+        if base:GetAttribute("OwnerUserId") == LP.UserId then
+            myBase = base
+            return myBase
+        end
+    end
+    return nil
+end
+
+local function getItems()
     local base = getMyBase()
     return base and base:FindFirstChild("Items")
 end
 
-local FloorKit
-pcall(function() FloorKit = require(RS.Shared.FloorKit) end)
-
-local function isBoard(name)
-    return name:match("Board$") ~= nil
+local function findItem(fragment)
+    local items = getItems()
+    if not items then return nil end
+    for _, it in ipairs(items:GetChildren()) do
+        if it.Name:lower():find(fragment, 1, true) then return it end
+    end
+    return nil
 end
 
--- TraderDesk, TraderDesk2, ClientDesk2, ... (or FloorKit "Tip" role)
-local function isDesk(name)
-    if name:lower():find("desk") then return true end
-    local k = FloorKit and FloorKit.ByKind and FloorKit.ByKind[name]
-    return k ~= nil and k.Role == "Tip"
-end
-
--- Researcher1, Researcher2, Researcher3, ...
-local function isResearcher(name)
-    return name:lower():find("researcher") ~= nil
-end
-
--- Manager (or FloorKit "Manager" role)
-local function isManager(name)
-    if name:lower():find("manager") then return true end
-    local k = FloorKit and FloorKit.ByKind and FloorKit.ByKind[name]
-    return k ~= nil and k.Role == "Manager"
-end
-
--- PropertyInvestor1 ... PropertyInvestor4, GoldInvestor1 ... GoldInvestor4 (any name containing "investor")
-local INVESTOR_MAX = 4
-local function isInvestor(name)
-    if not name:lower():find("investor") then return false end
-    local n = tonumber(name:match("(%d+)$")) or 1
-    return n <= INVESTOR_MAX
-end
-
--- HousePlot1 ... HousePlot5
-local HOUSEPLOT_MAX = 5
-local function isHousePlot(name)
-    if not name:lower():find("houseplot") then return false end
-    local n = tonumber(name:match("(%d+)$")) or 1
-    return n <= HOUSEPLOT_MAX
-end
-
--- RenoPaint, RenoGarden, RenoRoof, ... (any item starting with "Reno")
-local function isReno(name)
-    return name:lower():find("^reno") ~= nil
-end
-
--- Smelter1, Smelter2, ...
-local function isSmelter(name)
-    return name:lower():find("smelter") ~= nil
-end
-
--- Foreman
-local function isForeman(name)
-    return name:lower():find("foreman") ~= nil
-end
-
--- Sculptor1, Sculptor2, Sculptor3, ...
-local function isSculptor(name)
-    return name:lower():find("sculptor") ~= nil
-end
-
--- Engineer1, Engineer2, ...
-local function isEngineer(name)
-    return name:lower():find("engineer") ~= nil
-end
-
--- ServerRack1, ServerRack2, ...
-local function isServerRack(name)
-    return name:lower():find("serverrack") ~= nil
-end
-
--- LaunchBay1, LaunchBay2, LaunchBay3, ...
-local function isLaunchBay(name)
-    return name:lower():find("launchbay") ~= nil
-end
-
--- Sysadmin
-local function isSysadmin(name)
-    return name:lower():find("sysadmin") ~= nil
-end
-
--- Everything that "Auto Upgrade" should upgrade
-local function isUpgradeTarget(name)
-    return isBoard(name) or isDesk(name) or isResearcher(name) or isManager(name)
-        or isInvestor(name) or isHousePlot(name) or isReno(name) or isSmelter(name)
-        or isForeman(name) or isSculptor(name) or isEngineer(name) or isServerRack(name)
-        or isLaunchBay(name) or isSysadmin(name)
+-- Generation based loop runner: turning a toggle off (or on again) stops the old loop.
+local generation = {}
+local function setLoop(name, state, interval, fn)
+    generation[name] = (generation[name] or 0) + 1
+    if not state then return end
+    local mine = generation[name]
+    local function alive() return generation[name] == mine end
+    task.spawn(function()
+        while alive() do
+            local ok, err = pcall(fn, alive)
+            if not ok then warn("[" .. name .. "] " .. tostring(err)) end
+            task.wait(interval)
+        end
+    end)
 end
 
 -- ==================================================
@@ -190,99 +101,90 @@ end
 -- ==================================================
 local Farm = Gui:CreateTab("Auto Farm", 4483362458)
 
-local pumping, upgrading, buying = false, false, false
-
--- Fixed values (their controls were removed from the GUI)
-local UPGRADE_INTERVAL = 0.3 -- seconds between each upgrade call
-local BUY_INTERVAL = 1       -- seconds between each auto-buy check
-local BUY_METHOD = "Touch"   -- always use touch (falls back to teleport if firetouchinterest is missing)
-
-local upgradeAmount = 1
-
 Farm:CreateSection("Hype Meter")
 
 Farm:CreateToggle({
     Name = "Auto Pump",
-    Description = "Pumps the nearest HypeMeter every 0.5s",
+    Description = "Pumps your own HypeMeter every 0.5s",
     Flag = "AutoPump",
     CurrentValue = false,
     Callback = function(state)
-        pumping = state
-        if state then
-            task.spawn(function()
-                while pumping do
-                    pcall(function()
-                        local hrp, bases = getHRP(), workspace:FindFirstChild("Bases")
-                        local rf = remote("MeterService", "RF_Pump")
-                        if not (hrp and bases and rf) then return end
-                        local best, bestDist = nil, math.huge
-                        for _, o in ipairs(bases:GetDescendants()) do
-                            if o.Name == "HypeMeter" then
-                                local p = getPos(o)
-                                if p then
-                                    local d = (p - hrp.Position).Magnitude
-                                    if d < bestDist then best, bestDist = o, d end
-                                end
-                            end
-                        end
-                        if best then rf:InvokeServer(best) end
-                    end)
-                    task.wait(0.5)
-                end
-            end)
-        end
-        Gui:Notify({Title = "Auto Pump", Content = state and "ON (0.5s)" or "OFF", Duration = 2})
+        setLoop("pump", state, 0.5, function()
+            local items = getItems()
+            local rf = remote("MeterService", "RF_Pump")
+            if not (items and rf) then return end
+            for _, it in ipairs(items:GetChildren()) do
+                if it.Name == "HypeMeter" then rf:InvokeServer(it) end
+            end
+        end)
+        notify("Auto Pump", state and "ON" or "OFF")
     end
 })
 
 Farm:CreateSection("Upgrade")
 
-Farm:CreateSlider({
+local UPGRADE_DELAY = 0.3
+local upgradeAmount = 1
+
+Farm:CreateDropdown({
     Name = "Amount per Upgrade",
-    Range = {1, 10},
-    Increment = 1,
-    CurrentValue = 1,
-    Flag = "UpgradeAmount",
-    Callback = function(v) upgradeAmount = v end
+    Options = {"1", "5", "10"},
+    CurrentOption = "1",
+    Flag = "UpgradeAmountChoice",
+    Callback = function(opt)
+        local v = type(opt) == "table" and opt[1] or opt
+        upgradeAmount = tonumber(v) or 1
+    end
 })
 
-local function runUpgrade(filter, flagGetter)
-    task.spawn(function()
-        while flagGetter() do
-            pcall(function()
-                local items = getMyItems()
-                local rf = remote("MachineService", "RF_Upgrade")
-                if not (items and rf) then return end
-                for _, it in ipairs(items:GetChildren()) do
-                    if not flagGetter() then break end
-                    if filter(it.Name) then
-                        rf:InvokeServer(it, upgradeAmount)
-                        task.wait(UPGRADE_INTERVAL)
-                    end
-                end
-            end)
-            task.wait(0.1)
+local function costAttr(amount)
+    return amount == 1 and "UpgradeCost" or ("UpgradeCost" .. amount)
+end
+
+-- Upgrades every item in your base that exposes an UpgradeCost attribute (-1 means max level).
+local function upgradeOnce(alive)
+    local items = getItems()
+    local rf = remote("MachineService", "RF_Upgrade")
+    if not (items and rf) then return end
+
+    local list = {}
+    for _, it in ipairs(items:GetChildren()) do
+        local amount = upgradeAmount
+        local cost = amount > 1 and it:GetAttribute(costAttr(amount)) or nil
+        if type(cost) ~= "number" or cost < 0 then
+            amount = 1
+            cost = it:GetAttribute("UpgradeCost")
         end
-    end)
+        if type(cost) == "number" and cost >= 0 then
+            table.insert(list, {item = it, cost = cost, amount = amount})
+        end
+    end
+    table.sort(list, function(a, b) return a.cost < b.cost end)
+
+    for _, e in ipairs(list) do
+        if not alive() then return end
+        if e.cost <= getCash() then
+            rf:InvokeServer(e.item, e.amount)
+            task.wait(UPGRADE_DELAY)
+        end
+    end
 end
 
 Farm:CreateToggle({
     Name = "Auto Upgrade",
-    Description = "Boards, Desks, Researchers, Managers, Investors (1-4), House Plots (1-5), Reno items, Smelters, Foreman, Sculptors, Engineers, Server Racks, Launch Bays, Sysadmin",
+    Description = "Upgrades every upgradable item in your base, cheapest first",
     Flag = "AutoUpgrade",
     CurrentValue = false,
     Callback = function(state)
-        upgrading = state
-        if state then runUpgrade(isUpgradeTarget, function() return upgrading end) end
-        Gui:Notify({Title = "Auto Upgrade", Content = state and "ON" or "OFF", Duration = 2})
+        setLoop("upgrade", state, 0.2, upgradeOnce)
+        notify("Auto Upgrade", state and "ON" or "OFF")
     end
 })
 
--- ==================================================
--- AUTO BUY BUTTONS
--- ==================================================
 Farm:CreateSection("Buttons")
 
+local BUY_INTERVAL = 1
+local allowTokenUse = false
 local cooldown = {}
 
 local function getTouchPart(btn)
@@ -294,90 +196,233 @@ local function getTouchPart(btn)
     return top:FindFirstChildWhichIsA("BasePart", true)
 end
 
-local function getAffordableButtons()
+local function pressButton(part)
+    local hrp = getHRP()
+    if not hrp then return end
+    if firetouchinterest then
+        firetouchinterest(hrp, part, 0)
+        task.wait(0.1)
+        firetouchinterest(hrp, part, 1)
+        return
+    end
+    local back = hrp.CFrame
+    hrp.CFrame = part.CFrame * CFrame.new(0, 3, 0)
+    task.wait(0.4)
+    hrp.CFrame = back
+end
+
+local function buyOnce()
     local base = getMyBase()
     local folder = base and base:FindFirstChild("Buttons")
-    local cash = getCash()
-    if not (folder and cash) then return {}, cash end
+    if not folder then return end
+    if (LP:GetAttribute("Skips") or 0) > 0 and not allowTokenUse then return end
 
-    local list = {}
+    local cash = getCash()
+    local best
     for _, btn in ipairs(folder:GetChildren()) do
-        if (cooldown[btn] or 0) <= os.clock() then
-            local b = btn:FindFirstChild("Base")
-            local gui = b and b:FindFirstChild("ButtonGui")
-            local label = gui and gui:FindFirstChild("PriceLabel")
-            local price = label and parseMoney(label.Text)
+        local price = btn:GetAttribute("Price")
+        if type(price) == "number" and price <= cash and (cooldown[btn] or 0) <= os.clock() then
             local part = getTouchPart(btn)
-            if price and part and price <= cash then
-                table.insert(list, {btn = btn, price = price, part = part})
+            if part and (not best or price < best.price) then
+                best = {btn = btn, price = price, part = part}
             end
         end
     end
-    table.sort(list, function(a, b) return a.price < b.price end)
-    return list, cash
-end
-
-local function pressButton(entry)
-    local hrp = getHRP()
-    if not hrp then return false end
-
-    if BUY_METHOD == "Touch" and firetouchinterest then
-        firetouchinterest(hrp, entry.part, 0)
-        task.wait(0.1)
-        firetouchinterest(hrp, entry.part, 1)
-        return true
+    if best then
+        cooldown[best.btn] = os.clock() + 3
+        pressButton(best.part)
     end
-
-    -- Fallback: teleport onto the button and come back
-    local back = hrp.CFrame
-    hrp.CFrame = entry.part.CFrame * CFrame.new(0, 3, 0)
-    task.wait(0.4)
-    hrp.CFrame = back
-    return true
 end
 
 Farm:CreateToggle({
     Name = "Auto Buy Buttons",
-    Description = "Buys the cheapest affordable upgrade button",
+    Description = "Buys the cheapest affordable button every second",
     Flag = "AutoBuyButtons",
     CurrentValue = false,
     Callback = function(state)
-        buying = state
-        if state then
-            task.spawn(function()
-                while buying do
-                    pcall(function()
-                        local list = getAffordableButtons()
-                        local entry = list[1]
-                        if entry then
-                            pressButton(entry)
-                            cooldown[entry.btn] = os.clock() + 3
-                        end
-                    end)
-                    task.wait(BUY_INTERVAL)
+        setLoop("buy", state, BUY_INTERVAL, buyOnce)
+        notify("Auto Buy Buttons", state and "ON" or "OFF")
+    end
+})
+
+Farm:CreateToggle({
+    Name = "Allow Token Use",
+    Description = "When OFF, auto buy pauses while you hold skip tokens so they are not spent",
+    Flag = "AllowTokenUse",
+    CurrentValue = false,
+    Callback = function(state) allowTokenUse = state end
+})
+
+Farm:CreateSection("Progress")
+
+Farm:CreateToggle({
+    Name = "Auto Rebirth",
+    Description = "Rebirths when available. This RESETS cash, floors and upgrades",
+    Flag = "AutoRebirth",
+    CurrentValue = false,
+    Callback = function(state)
+        setLoop("rebirth", state, 5, function()
+            local ok, info = call("RebirthService", "RF_GetInfo")
+            if ok and type(info) == "table" and info.CanRebirth then
+                local ok2, res = call("RebirthService", "RF_Rebirth")
+                if ok2 and type(res) == "table" and res.Ok then
+                    notify("Auto Rebirth", "Rebirthed")
                 end
-            end)
-        end
-        Gui:Notify({Title = "Auto Buy Buttons", Content = state and "ON" or "OFF", Duration = 2})
+            end
+        end)
+        notify("Auto Rebirth", state and "ON" or "OFF")
     end
 })
 
 Farm:CreateButton({
-    Name = "Print Buttons Info",
-    Description = "Prints price, cash and affordability (console F9)",
+    Name = "Claim Free Tokens",
+    Description = "Claims the free skip tokens if they are still available",
+    Interact = "Claim",
+    Callback = function()
+        if LP:GetAttribute("FreeTokensClaimed") ~= false then
+            notify("Tokens", "Nothing to claim")
+            return
+        end
+        local ok, res = call("MonetizationService", "RF_ClaimFreeTokens")
+        notify("Tokens", (ok and res) and "Claimed" or "Claim failed")
+    end
+})
+
+Farm:CreateButton({
+    Name = "Finish Tutorial",
+    Interact = "Skip",
+    Callback = function()
+        local ok = call("DataService", "RF_FinishTutorial")
+        notify("Tutorial", ok and "Requested" or "Failed")
+    end
+})
+
+Farm:CreateButton({
+    Name = "Print Base Info",
+    Description = "Prints base, items and buttons (console F9)",
     Interact = "Print",
     Callback = function()
         local base = getMyBase()
-        local folder = base and base:FindFirstChild("Buttons")
-        print("Base:", base and base.Name, "| Cash:", getCash())
-        if not folder then return end
-        for _, btn in ipairs(folder:GetChildren()) do
-            local b = btn:FindFirstChild("Base")
-            local gui = b and b:FindFirstChild("ButtonGui")
-            local label = gui and gui:FindFirstChild("PriceLabel")
-            print(btn.Name, label and label.Text, parseMoney(label and label.Text), getTouchPart(btn) and "Top OK" or "no Top")
+        print("Base:", base and base.Name, "| Cash:", getCash(), "| Tokens:", LP:GetAttribute("Skips"))
+        local items = getItems()
+        if items then
+            for _, it in ipairs(items:GetChildren()) do
+                print("Item", it.Name, "UpgradeCost", it:GetAttribute("UpgradeCost"), "ReadyAt", it:GetAttribute("ReadyAt"))
+            end
         end
-        Gui:Notify({Title = "Buttons", Content = "Printed to console (F9)", Duration = 2})
+        local folder = base and base:FindFirstChild("Buttons")
+        if folder then
+            for _, btn in ipairs(folder:GetChildren()) do
+                print("Button", btn.Name, btn:GetAttribute("Price"), getTouchPart(btn) and "Top OK" or "no Top")
+            end
+        end
+        notify("Info", "Printed to console (F9)")
+    end
+})
+
+-- ==================================================
+-- AUTO MINIGAMES
+-- ==================================================
+Farm:CreateSection("Minigames")
+
+local function serverNow()
+    return workspace:GetServerTimeNow()
+end
+
+local function waitUntil(t, alive)
+    while alive() and serverNow() < t do task.wait(0.05) end
+    return alive()
+end
+
+local function playCrash(r, alive)
+    local target = r.Crash * 0.9
+    if not waitUntil(r.Start + math.log(target) / r.Growth, alive) then return nil end
+    local mult = math.min(math.exp(r.Growth * (serverNow() - r.Start)), target)
+    local ok, res = call("CrashService", "RF_Sell", mult)
+    if ok and type(res) == "table" and res.Ok then return res end
+    return nil
+end
+
+local function playGoldRush(r, alive)
+    if not waitUntil(r.Start, alive) then return nil end
+    local startedAt = serverNow()
+    call("GoldRushService", "RF_PourStart")
+    if not waitUntil(startedAt + r.Target / r.Rate, alive) then return nil end
+    local fill = r.Rate * (serverNow() - startedAt)
+    local ok, res = call("GoldRushService", "RF_PourStop", fill)
+    if ok and type(res) == "table" and res.Ok then return res end
+    return nil
+end
+
+local function playHarbour(r, alive)
+    local delay = math.min(0.35 * #r.Sequence, (r.Par or 4) * 0.7)
+    if not waitUntil(r.InputOpen + delay, alive) then return nil end
+    local elapsed = serverNow() - r.InputOpen
+    local ok, res = call("HarbourSignalsService", "RF_Submit", r.Sequence, elapsed)
+    if ok and type(res) == "table" and res.Ok then return res end
+    return nil
+end
+
+local function needleAt(r, now)
+    local p = ((now - r.Start) / r.Period + r.Phase) % 2
+    if p > 1 then p = 2 - p end
+    return p
+end
+
+local function playLaunch(r, alive)
+    local bestT
+    for _, target in ipairs({r.Center, 2 - r.Center}) do
+        local k = math.ceil((0.2 / r.Period - (target - r.Phase)) / 2)
+        local t = r.Period * (target - r.Phase + 2 * k)
+        if not bestT or t < bestT then bestT = t end
+    end
+    if not waitUntil(r.Start + bestT, alive) then return nil end
+    local ok, res = call("LaunchControlService", "RF_Fire", needleAt(r, serverNow()))
+    if ok and type(res) == "table" and res.Ok then return res end
+    return nil
+end
+
+local MINIGAMES = {
+    {item = "crashgame", service = "CrashService", play = playCrash},
+    {item = "goldrush", service = "GoldRushService", play = playGoldRush},
+    {item = "harboursignals", service = "HarbourSignalsService", play = playHarbour},
+    {item = "launchcontrol", service = "LaunchControlService", play = playLaunch},
+}
+
+local function runMinigame(cfg, alive)
+    local item = findItem(cfg.item)
+    if not item then return end
+    if item:GetAttribute("OwnerUserId") ~= LP.UserId then return end
+    if (item:GetAttribute("ReadyAt") or 0) > serverNow() then return end
+
+    local ok, st = call(cfg.service, "RF_Start")
+    if not (ok and type(st) == "table" and st.Ok) then return end
+
+    local round = st.Round or 0
+    local rounds = st.Rounds or 3
+    while alive() and round < rounds do
+        local ok2, r = call(cfg.service, "RF_StartRound")
+        if not (ok2 and type(r) == "table" and r.Ok) then return end
+        local res = cfg.play(r, alive)
+        if not res then return end
+        round = r.Round or (round + 1)
+    end
+end
+
+Farm:CreateToggle({
+    Name = "Auto Minigames",
+    Description = "Crash, Gold Rush, Harbour Signals and Launch Control when their cooldown is ready",
+    Flag = "AutoMinigames",
+    CurrentValue = false,
+    Callback = function(state)
+        setLoop("minigames", state, 5, function(alive)
+            for _, cfg in ipairs(MINIGAMES) do
+                if not alive() then return end
+                local ok, err = pcall(runMinigame, cfg, alive)
+                if not ok then warn("[Minigame " .. cfg.service .. "] " .. tostring(err)) end
+            end
+        end)
+        notify("Auto Minigames", state and "ON" or "OFF")
     end
 })
 
@@ -389,35 +434,34 @@ local PlayerTab = Gui:CreateTab("Player", 4483362458)
 PlayerTab:CreateSection("Utility")
 
 local afkConn
+local function setAntiAfk(state)
+    if afkConn then afkConn:Disconnect() afkConn = nil end
+    if state then
+        local VU = game:GetService("VirtualUser")
+        afkConn = LP.Idled:Connect(function()
+            VU:CaptureController()
+            VU:ClickButton2(Vector2.new())
+        end)
+    end
+end
+setAntiAfk(true)
+
 PlayerTab:CreateToggle({
     Name = "Anti AFK",
-    Description = "Prevents idle kick",
+    Description = "Prevents the idle kick and the game's idle rejoin (ON by default)",
     Flag = "AntiAFK",
-    CurrentValue = false,
-    Callback = function(state)
-        if afkConn then afkConn:Disconnect() afkConn = nil end
-        if state then
-            local VU = game:GetService("VirtualUser")
-            afkConn = LP.Idled:Connect(function()
-                VU:CaptureController()
-                VU:ClickButton2(Vector2.new())
-            end)
-        end
-    end
+    CurrentValue = true,
+    Callback = function(state) setAntiAfk(state) end
 })
 
-local speedOn, speedVal = false, 32
+local speedVal = 32
 PlayerTab:CreateSlider({
     Name = "WalkSpeed",
     Range = {16, 100},
     Increment = 1,
     CurrentValue = 32,
     Flag = "WalkSpeedValue",
-    Callback = function(v)
-        speedVal = v
-        local h = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
-        if speedOn and h then h.WalkSpeed = v end
-    end
+    Callback = function(v) speedVal = v end
 })
 
 PlayerTab:CreateToggle({
@@ -426,36 +470,29 @@ PlayerTab:CreateToggle({
     Flag = "WalkSpeedOn",
     CurrentValue = false,
     Callback = function(state)
-        speedOn = state
-        task.spawn(function()
-            while speedOn do
-                local h = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
-                if h then h.WalkSpeed = speedVal end
-                task.wait(0.5)
-            end
+        setLoop("walkspeed", state, 0.5, function()
+            local h = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+            if h then h.WalkSpeed = speedVal end
+        end)
+        if not state then
             local h = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
             if h then h.WalkSpeed = 16 end
-        end)
+        end
     end
 })
 
 PlayerTab:CreateButton({
-    Name = "Teleport to Nearest HypeMeter",
+    Name = "Teleport to My HypeMeter",
     Interact = "TP",
     Callback = function()
-        local hrp, bases = getHRP(), workspace:FindFirstChild("Bases")
-        if not (hrp and bases) then return end
-        local best, bestDist = nil, math.huge
-        for _, o in ipairs(bases:GetDescendants()) do
-            if o.Name == "HypeMeter" then
-                local p = getPos(o)
-                if p then
-                    local d = (p - hrp.Position).Magnitude
-                    if d < bestDist then best, bestDist = p, d end
-                end
-            end
+        local hrp = getHRP()
+        local meter = findItem("hypemeter")
+        if not (hrp and meter) then
+            notify("Teleport", "HypeMeter not found")
+            return
         end
-        if best then hrp.CFrame = CFrame.new(best + Vector3.new(0, 4, 6)) end
+        local pos = meter:GetPivot().Position
+        hrp.CFrame = CFrame.new(pos + Vector3.new(0, 4, 6))
     end
 })
 
@@ -482,7 +519,7 @@ Tools:CreateButton({
         local text = table.concat(out, "\n")
         print(text)
         if setclipboard then setclipboard(text) end
-        Gui:Notify({Title = "Scanner", Content = "Done, check clipboard", Duration = 3})
+        notify("Scanner", "Done, check clipboard")
     end
 })
 
@@ -525,7 +562,7 @@ Tools:CreateToggle({
     CurrentValue = false,
     Callback = function(state)
         if state and not hookmetamethod then
-            Gui:Notify({Title = "Logger", Content = "Executor lacks hookmetamethod", Duration = 3})
+            notify("Logger", "Executor lacks hookmetamethod")
             return
         end
         logging = state
@@ -540,7 +577,7 @@ Tools:CreateButton({
         local text = table.concat(logBuffer, "\n")
         if setclipboard then setclipboard(text) end
         print(text)
-        Gui:Notify({Title = "Logger", Content = #logBuffer .. " lines copied", Duration = 2})
+        notify("Logger", #logBuffer .. " lines copied")
     end
 })
 
